@@ -1,4 +1,4 @@
-//! Admin UI 路由配置
+//! Admin UI router configuration
 
 use axum::{
     Router,
@@ -9,28 +9,28 @@ use axum::{
 };
 use rust_embed::Embed;
 
-/// 嵌入前端构建产物
+/// Embeds frontend build artifacts
 #[derive(Embed)]
 #[folder = "admin-ui/dist"]
 struct Asset;
 
-/// 创建 Admin UI 路由
+/// Create Admin UI router
 pub fn create_admin_ui_router() -> Router {
     Router::new()
         .route("/", get(index_handler))
         .route("/{*file}", get(static_handler))
 }
 
-/// 处理首页请求
+/// Handle index page request
 async fn index_handler() -> impl IntoResponse {
     serve_index()
 }
 
-/// 处理静态文件请求
+/// Handle static file request
 async fn static_handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
 
-    // 安全检查：拒绝包含 .. 的路径
+    // Security check: reject paths containing ..
     if path.contains("..") {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
@@ -38,13 +38,13 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
             .expect("Failed to build response");
     }
 
-    // 尝试获取请求的文件
+    // Try to get the requested file
     if let Some(content) = Asset::get(path) {
         let mime = mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string();
 
-        // 根据文件类型设置不同的缓存策略
+        // Set different cache strategies based on file type
         let cache_control = get_cache_control(path);
 
         return Response::builder()
@@ -55,7 +55,7 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
             .expect("Failed to build response");
     }
 
-    // SPA fallback: 如果文件不存在且不是资源文件，返回 index.html
+    // SPA fallback: if the file does not exist and is not an asset file, return index.html
     if !is_asset_path(path) {
         return serve_index();
     }
@@ -67,7 +67,7 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
         .expect("Failed to build response")
 }
 
-/// 提供 index.html
+/// Serve index.html
 fn serve_index() -> Response<Body> {
     match Asset::get("index.html") {
         Some(content) => Response::builder()
@@ -85,23 +85,23 @@ fn serve_index() -> Response<Body> {
     }
 }
 
-/// 根据文件类型返回合适的缓存策略
+/// Return appropriate cache strategy based on file type
 fn get_cache_control(path: &str) -> &'static str {
     if path.ends_with(".html") {
-        // HTML 文件不缓存，确保用户获取最新版本
+        // HTML files are not cached to ensure users get the latest version
         "no-cache"
     } else if path.starts_with("assets/") {
-        // assets/ 目录下的文件带有内容哈希，可以长期缓存
+        // Files under assets/ have content hashes and can be cached long-term
         "public, max-age=31536000, immutable"
     } else {
-        // 其他文件（如 favicon）使用较短的缓存
+        // Other files (such as favicon) use a shorter cache duration
         "public, max-age=3600"
     }
 }
 
-/// 判断是否为资源文件路径（有扩展名的文件）
+/// Determine if a path is an asset file path (files with extensions)
 fn is_asset_path(path: &str) -> bool {
-    // 检查最后一个路径段是否包含扩展名
+    // Check if the last path segment contains an extension
     path.rsplit('/')
         .next()
         .map(|filename| filename.contains('.'))

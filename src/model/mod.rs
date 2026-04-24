@@ -1,4 +1,4 @@
-//! 应用配置模型
+//! Application configuration models
 
 pub mod arg;
 pub mod config;

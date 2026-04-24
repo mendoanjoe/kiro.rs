@@ -1,3 +1,3 @@
-//! 公共工具模块
+//! Common utilities module
 
 pub mod auth;

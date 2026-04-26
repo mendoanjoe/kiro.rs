@@ -1,4 +1,4 @@
-//! 设备指纹生成器
+//! Device fingerprint generator
 //!
 
 use std::collections::HashMap;
@@ -11,86 +11,86 @@ use uuid::Uuid;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::model::config::Config;
 
-/// 兜底 machineId 缓存（按凭据 id 分桶，进程生命周期内稳定）
+/// Fallback machineId cache (bucketed by credential id, stable within process lifetime)
 ///
-/// key 为 `credentials.id`；无 id 的凭据共享同一个兜底值（正常流程不会出现）。
+/// Key is `credentials.id`; credentials without an id share the same fallback value (should not occur in normal flow).
 static FALLBACK_MACHINE_IDS: OnceLock<Mutex<HashMap<Option<u64>, String>>> = OnceLock::new();
 
-/// 标准化 machineId 格式
+/// Normalize the machineId format
 ///
-/// 支持以下格式：
-/// - 64 字符十六进制字符串（直接返回）
-/// - UUID 格式（如 "2582956e-cc88-4669-b546-07adbffcb894"，移除连字符后补齐到 64 字符）
+/// Supports the following formats:
+/// - 64-character hex string (returned as-is)
+/// - UUID format (e.g. "2582956e-cc88-4669-b546-07adbffcb894"; stripped of hyphens and padded to 64 characters)
 fn normalize_machine_id(machine_id: &str) -> Option<String> {
     let trimmed = machine_id.trim();
 
-    // 如果已经是 64 字符，直接返回
+    // If already 64 characters, return as-is
     if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
         return Some(trimmed.to_string());
     }
 
-    // 尝试解析 UUID 格式（移除连字符）
+    // Try to parse UUID format (remove hyphens)
     let without_dashes: String = trimmed.chars().filter(|c| *c != '-').collect();
 
-    // UUID 去掉连字符后是 32 字符
+    // UUID without hyphens is 32 characters
     if without_dashes.len() == 32 && without_dashes.chars().all(|c| c.is_ascii_hexdigit()) {
-        // 补齐到 64 字符（重复一次）
+        // Pad to 64 characters (repeat once)
         return Some(format!("{}{}", without_dashes, without_dashes));
     }
 
-    // 无法识别的格式
+    // Unrecognized format
     None
 }
 
-/// 根据凭证信息生成唯一的 Machine ID
+/// Generate a unique Machine ID based on credential information
 ///
-/// 优先级：
-/// 1. 凭据级 `machineId`（若配置且格式合法）
-/// 2. 全局 `config.machineId`（若配置且格式合法）
-/// 3. 根据凭据类型派生（互斥，由 [`KiroCredentials::is_api_key_credential`] 分流）：
-///    - API Key 凭据：基于 `kiroApiKey` 派生
-///    - OAuth 凭据：基于 `refreshToken` 派生
-/// 4. 兜底：基于随机种子派生，按 `credentials.id` 在进程内缓存（首次触发 warn 日志）
+/// Priority：
+/// 1. Credential-level `machineId` (if configured and format is valid)
+/// 2. Global `config.machineId` (if configured and format is valid)
+/// 3. Derived from the credential type (mutually exclusive, branched by [`KiroCredentials::is_api_key_credential`]):
+///    - API Key credential: derived from `kiroApiKey`
+///    - OAuth credential: derived from `refreshToken`
+/// 4. Fallback: derived from a random seed, cached in-process by `credentials.id` (logs a warning on first use)
 pub fn generate_from_credentials(credentials: &KiroCredentials, config: &Config) -> String {
-    // 如果配置了凭据级 machineId，优先使用
+    // If a credential-level machineId is configured, use it first
     if let Some(ref machine_id) = credentials.machine_id {
         if let Some(normalized) = normalize_machine_id(machine_id) {
             return normalized;
         }
     }
 
-    // 如果配置了全局 machineId，作为默认值
+    // If a global machineId is configured, use it as the default
     if let Some(ref machine_id) = config.machine_id {
         if let Some(normalized) = normalize_machine_id(machine_id) {
             return normalized;
         }
     }
 
-    // 按凭据类型派生（API Key 与 refreshToken 两条路径互斥，不回落）
+    // Derive by credential type (API Key and refreshToken paths are mutually exclusive; no fallback)
     if credentials.is_api_key_credential() {
-        // API Key 凭据：基于 kiroApiKey 派生
+        // API Key credential: derive from kiroApiKey
         if let Some(ref api_key) = credentials.kiro_api_key {
             if !api_key.is_empty() {
                 return sha256_hex(&format!("KiroAPIKey/{}", api_key));
             }
         }
     } else if let Some(ref refresh_token) = credentials.refresh_token {
-        // OAuth 凭据：基于 refreshToken 派生
+        // OAuth credential: derive from refreshToken
         if !refresh_token.is_empty() {
             return sha256_hex(&format!("KotlinNativeAPI/{}", refresh_token));
         }
     }
 
-    // 兜底：走派生流程生成随机 machineId，按凭据 id 进程内稳定
+    // Fallback: derive a random machineId, stable in-process per credential id
     fallback_machine_id(credentials)
 }
 
-/// 为缺失派生材料的凭据生成兜底 machineId
+/// Generate a fallback machineId for credentials that lack derivation material
 ///
-/// - 仍经 `sha256("KiroFallback/<uuid>")` 派生，输出格式与正常路径一致（64 字符十六进制）
-/// - 按 `credentials.id` 在进程内缓存；同一凭据多次调用返回同一值
-/// - 进程重启会重新随机；不持久化
-/// - 每个凭据首次生成时 warn 一次
+/// - Still derived via `sha256("KiroFallback/<uuid>")`, output format consistent with normal path (64-char hex)
+/// - Cached in-process by `credentials.id`; multiple calls for the same credential return the same value
+/// - Re-randomized on process restart; not persisted
+/// - Logs a warning once the first time it is generated for each credential
 fn fallback_machine_id(credentials: &KiroCredentials) -> String {
     let cache = FALLBACK_MACHINE_IDS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut map = cache.lock();
@@ -102,13 +102,13 @@ fn fallback_machine_id(credentials: &KiroCredentials) -> String {
     let derived = sha256_hex(&format!("KiroFallback/{}", seed));
     tracing::warn!(
         credential_id = ?credentials.id,
-        "凭据缺少派生材料（kiroApiKey/refreshToken 均不可用），使用随机兜底 machineId（进程内稳定）"
+        "Credential lacks derivation material (kiroApiKey/refreshToken both unavailable); using random fallback machineId (stable within process)"
     );
     map.insert(credentials.id, derived.clone());
     derived
 }
 
-/// SHA256 哈希实现（返回十六进制字符串）
+/// SHA-256 hash implementation (returns a hex string)
 fn sha256_hex(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());

@@ -59,10 +59,10 @@ fn is_quote_char(buffer: &str, pos: usize) -> bool {
 /// - 后面没有双换行符（真正的结束标签后面会有 `\n\n`）
 /// - 标签在缓冲区末尾（流式处理时需要等待更多内容）
 ///
-/// # 参数
+/// # Parameters
 /// - `buffer`: 要搜索的字符串
 ///
-/// # 返回值
+/// # Returns值
 /// - `Some(pos)`: 真正的结束标签的起始位置
 /// - `None`: 没有找到真正的结束标签
 fn find_real_thinking_end_tag(buffer: &str) -> Option<usize> {
@@ -176,7 +176,7 @@ fn find_real_thinking_start_tag(buffer: &str) -> Option<usize> {
 /// 使用与流式处理相同的标签检测逻辑（引用字符过滤），确保一致性。
 /// 非流式场景下文本已完整，无需处理跨 chunk 分割问题。
 ///
-/// # 返回值
+/// # Returns值
 /// - `(Some(thinking_content), remaining_text)` — 检测到有效 thinking 块
 /// - `(None, original_text)` — 未检测到，原样返回
 pub(crate) fn extract_thinking_from_complete_text(text: &str) -> (Option<String>, String) {
@@ -525,7 +525,7 @@ pub struct StreamContext {
     pub output_tokens: i32,
     /// 工具块索引映射 (tool_id -> block_index)
     pub tool_block_indices: HashMap<String, i32>,
-    /// 工具名称反向映射（短名称 → 原始名称），用于响应时还原
+    /// Tool name反向映射（短名称 → 原始名称），用于响应时还原
     pub tool_name_map: HashMap<String, String>,
     /// thinking 是否启用
     pub thinking_enabled: bool,

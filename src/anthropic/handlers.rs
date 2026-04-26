@@ -1,4 +1,4 @@
-//! Anthropic API Handler 函数
+//! Anthropic API handler functions
 
 use std::convert::Infallible;
 
@@ -27,13 +27,13 @@ use super::stream::{BufferedStreamContext, SseEvent, StreamContext};
 use super::types::{CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse, OutputConfig, Thinking};
 use super::websearch;
 
-/// 将 KiroProvider 错误映射为 HTTP 响应
+/// Map a KiroProvider error to an HTTP response
 fn map_provider_error(err: Error) -> Response {
     let err_str = err.to_string();
 
-    // 上下文窗口满了（对话历史累积超出模型上下文窗口限制）
+    // Context window full (accumulated conversation history exceeds the model's context window limit)
     if err_str.contains("CONTENT_LENGTH_EXCEEDS_THRESHOLD") {
-        tracing::warn!(error = %err, "上游拒绝请求：上下文窗口已满（不应重试）");
+        tracing::warn!(error = %err, "Upstream rejected request: context window full (should not retry)");
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse::new(
@@ -44,9 +44,9 @@ fn map_provider_error(err: Error) -> Response {
             .into_response();
     }
 
-    // 单次输入太长（请求体本身超出上游限制）
+    // Single input too long (request body itself exceeds upstream limit)
     if err_str.contains("Input is too long") {
-        tracing::warn!(error = %err, "上游拒绝请求：输入过长（不应重试）");
+        tracing::warn!(error = %err, "Upstream rejected request: input too long (should not retry)");
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse::new(
@@ -56,12 +56,12 @@ fn map_provider_error(err: Error) -> Response {
         )
             .into_response();
     }
-    tracing::error!("Kiro API 调用失败: {}", err);
+    tracing::error!("Kiro API call failed: {}", err);
     (
         StatusCode::BAD_GATEWAY,
         Json(ErrorResponse::new(
             "api_error",
-            format!("上游 API 调用失败: {}", err),
+            format!("Upstream API call failed: {}", err),
         )),
     )
         .into_response()
@@ -69,7 +69,7 @@ fn map_provider_error(err: Error) -> Response {
 
 /// GET /v1/models
 ///
-/// 返回可用的模型列表
+/// Returns the list of available models
 pub async fn get_models() -> impl IntoResponse {
     tracing::info!("Received GET /v1/models request");
 

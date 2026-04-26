@@ -29,7 +29,7 @@ struct CachedBalance {
     data: BalanceResponse,
 }
 
-/// Admin 服务
+/// Admin service
 ///
 /// 封装所有 Admin API 的业务逻辑
 pub struct AdminService {
@@ -90,7 +90,7 @@ impl AdminService {
             })
             .collect();
 
-        // 按优先级排序（数字越小优先级越高）
+        // Sort by priority (lower number = higher priority)
         credentials.sort_by_key(|c| c.priority);
 
         CredentialsStatusResponse {
@@ -285,7 +285,7 @@ impl AdminService {
         &self,
         req: SetLoadBalancingModeRequest,
     ) -> Result<LoadBalancingModeResponse, AdminServiceError> {
-        // 验证模式值
+        // Validate the mode value
         if req.mode != "priority" && req.mode != "balanced" {
             return Err(AdminServiceError::InvalidCredential(
                 "mode 必须是 'priority' 或 'balanced'".to_string(),
@@ -397,7 +397,7 @@ impl AdminService {
             msg.contains("权限不足") ||
             msg.contains("已被限流") ||
             msg.contains("服务器错误") ||
-            msg.contains("Token 刷新失败") ||
+            msg.contains("token refresh failed") ||
             msg.contains("暂时不可用") ||
             // 网络错误（reqwest 错误）
             msg.contains("error trying to connect") ||
@@ -419,14 +419,14 @@ impl AdminService {
         let msg = e.to_string();
 
         // 凭据验证失败（refreshToken 无效、格式错误等）
-        let is_invalid_credential = msg.contains("缺少 refreshToken")
-            || msg.contains("refreshToken 为空")
+        let is_invalid_credential = msg.contains("missing refreshToken")
+            || msg.contains("refreshToken is empty")
             || msg.contains("refreshToken 已被截断")
             || msg.contains("凭据已存在")
             || msg.contains("refreshToken 重复")
             || msg.contains("kiroApiKey 重复")
-            || msg.contains("缺少 kiroApiKey")
-            || msg.contains("kiroApiKey 为空")
+            || msg.contains("missing kiroApiKey")
+            || msg.contains("kiroApiKey is empty")
             || msg.contains("凭证已过期或无效")
             || msg.contains("权限不足")
             || msg.contains("已被限流");

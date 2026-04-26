@@ -1,4 +1,4 @@
-//! Admin API 中间件
+//! Admin API middleware
 
 use std::sync::Arc;
 
@@ -14,12 +14,12 @@ use super::service::AdminService;
 use super::types::AdminErrorResponse;
 use crate::common::auth;
 
-/// Admin API 共享状态
+/// Admin API shared state
 #[derive(Clone)]
 pub struct AdminState {
-    /// Admin API 密钥
+    /// Admin API key
     pub admin_api_key: String,
-    /// Admin 服务
+    /// Admin service
     pub service: Arc<AdminService>,
 }
 
@@ -32,7 +32,7 @@ impl AdminState {
     }
 }
 
-/// Admin API 认证中间件
+/// Admin API authentication middleware
 pub async fn admin_auth_middleware(
     State(state): State<AdminState>,
     request: Request<Body>,

@@ -1,12 +1,12 @@
-//! Kiro 数据模型
+//! Kiro data models
 //!
-//! 包含 Kiro API 的所有数据类型定义：
-//! - `common`: 共享类型（枚举和辅助结构体）
-//! - `events`: 响应事件类型
-//! - `requests`: 请求类型
-//! - `credentials`: OAuth 凭证
-//! - `token_refresh`: Token 刷新
-//! - `usage_limits`: 使用额度查询
+//! Contains all data type definitions for the Kiro API:
+//! - `common`: shared types (enums and helper structs)
+//! - `events`: response event types
+//! - `requests`: request types
+//! - `credentials`: OAuth credentials
+//! - `token_refresh`: token refresh
+//! - `usage_limits`: usage limit queries
 
 pub mod common;
 pub mod credentials;

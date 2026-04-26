@@ -1,6 +1,6 @@
-//! Kiro 请求类型定义
+//! Kiro request type definitions
 //!
-//! 定义 Kiro API 的主请求结构
+//! Defines the main request structure for the Kiro API
 
 use serde::{Deserialize, Serialize};
 
@@ -30,9 +30,9 @@ use super::conversation::ConversationState;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroRequest {
-    /// 对话状态
+    /// Conversation state
     pub conversation_state: ConversationState,
-    /// Profile ARN（可选）
+    /// Profile ARN (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_arn: Option<String>,
 }

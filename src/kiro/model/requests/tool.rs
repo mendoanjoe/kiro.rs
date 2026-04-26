@@ -1,39 +1,39 @@
-//! 工具类型定义
+//! Tool type definitions
 //!
-//! 定义 Kiro API 中工具相关的类型
+//! Defines tool-related types in the Kiro API
 
 use serde::{Deserialize, Serialize};
 
-/// 工具定义
+/// Tool definition
 ///
-/// 用于在请求中定义可用的工具
+/// Used to define available tools in a request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tool {
-    /// 工具规范
+    /// Tool specification
     pub tool_specification: ToolSpecification,
 }
 
-/// 工具规范
+/// Tool specification
 ///
-/// 定义工具的名称、描述和输入模式
+/// Defines the tool's name, description, and input schema
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolSpecification {
-    /// 工具名称
+    /// Tool name
     pub name: String,
-    /// 工具描述
+    /// Tool description
     pub description: String,
-    /// 输入模式（JSON Schema）
+    /// Input schema (JSON Schema)
     pub input_schema: InputSchema,
 }
 
-/// 输入模式
+/// Input schema
 ///
-/// 包装 JSON Schema 定义
+/// Wraps a JSON Schema definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputSchema {
-    /// JSON Schema 定义
+    /// JSON Schema definition
     pub json: serde_json::Value,
 }
 
@@ -49,19 +49,19 @@ impl Default for InputSchema {
 }
 
 impl InputSchema {
-    /// 从 JSON 值创建
+    /// Create from a JSON value
     pub fn from_json(json: serde_json::Value) -> Self {
         Self { json }
     }
 }
 
-/// 工具执行结果
+/// Tool execution result
 ///
-/// 用于返回工具执行的结果
+/// Used to return the result of a tool execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolResult {
-    /// 工具使用 ID（与请求中的 tool_use_id 对应）
+    /// Tool use ID（与请求中的 tool_use_id 对应）
     pub tool_use_id: String,
     /// 结果内容（数组格式）
     pub content: Vec<serde_json::Map<String, serde_json::Value>>,
@@ -111,15 +111,15 @@ impl ToolResult {
     }
 }
 
-/// 工具使用条目
+/// Tool use条目
 ///
 /// 用于历史消息中记录工具调用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolUseEntry {
-    /// 工具使用 ID
+    /// Tool use ID
     pub tool_use_id: String,
-    /// 工具名称
+    /// Tool name
     pub name: String,
     /// 工具输入参数
     pub input: serde_json::Value,

@@ -1,27 +1,27 @@
-//! 事件基础定义
+//! Base event definitions
 //!
-//! 定义事件类型枚举、trait 和统一事件结构
+//! Defines the event type enum, trait, and unified event structure
 
 use crate::kiro::parser::error::{ParseError, ParseResult};
 use crate::kiro::parser::frame::Frame;
 
-/// 事件类型枚举
+/// Event type enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EventType {
-    /// 助手响应事件
+    /// Assistant response event
     AssistantResponse,
-    /// 工具使用事件
+    /// Tool use event
     ToolUse,
-    /// 计费事件
+    /// Metering event
     Metering,
-    /// 上下文使用率事件
+    /// Context usage event
     ContextUsage,
-    /// 未知事件类型
+    /// Unknown event type
     Unknown,
 }
 
 impl EventType {
-    /// 从事件类型字符串解析
+    /// Parse from an event type string
     pub fn from_str(s: &str) -> Self {
         match s {
             "assistantResponseEvent" => Self::AssistantResponse,
@@ -32,7 +32,7 @@ impl EventType {
         }
     }
 
-    /// 转换为事件类型字符串
+    /// Convert to an event type string
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::AssistantResponse => "assistantResponseEvent",
@@ -50,47 +50,47 @@ impl std::fmt::Display for EventType {
     }
 }
 
-/// 事件 payload trait
+/// Event payload trait
 ///
-/// 所有具体事件类型都需要实现此 trait
+/// All concrete event types must implement this trait
 pub trait EventPayload: Sized {
-    /// 从帧解析事件负载
+    /// Parse the event payload from a frame
     fn from_frame(frame: &Frame) -> ParseResult<Self>;
 }
 
-/// 统一事件枚举
+/// Unified event enum
 ///
-/// 封装所有可能的事件类型
+/// Encapsulates all possible event types
 #[derive(Debug, Clone)]
 pub enum Event {
-    /// 助手响应
+    /// Assistant response
     AssistantResponse(super::AssistantResponseEvent),
-    /// 工具使用
+    /// Tool use
     ToolUse(super::ToolUseEvent),
-    /// 计费
+    /// Metering
     Metering(()),
-    /// 上下文使用率
+    /// Context usage
     ContextUsage(super::ContextUsageEvent),
-    /// 未知事件 (保留原始帧数据)
+    /// Unknown event (preserves the raw frame data)
     Unknown {},
-    /// 服务端错误
+    /// Server error
     Error {
-        /// 错误代码
+        /// Error code
         error_code: String,
-        /// 错误消息
+        /// Error message
         error_message: String,
     },
-    /// 服务端异常
+    /// Server exception
     Exception {
-        /// 异常类型
+        /// Exception type
         exception_type: String,
-        /// 异常消息
+        /// Exception message
         message: String,
     },
 }
 
 impl Event {
-    /// 从帧解析事件
+    /// Parse an event from a frame
     pub fn from_frame(frame: Frame) -> ParseResult<Self> {
         let message_type = frame.message_type().unwrap_or("event");
 
@@ -102,7 +102,7 @@ impl Event {
         }
     }
 
-    /// 解析事件类型消息
+    /// Parse an event-type message
     fn parse_event(frame: Frame) -> ParseResult<Self> {
         let event_type_str = frame.event_type().unwrap_or("unknown");
         let event_type = EventType::from_str(event_type_str);
@@ -125,7 +125,7 @@ impl Event {
         }
     }
 
-    /// 解析错误类型消息
+    /// Parse an error-type message
     fn parse_error(frame: Frame) -> ParseResult<Self> {
         let error_code = frame
             .headers
@@ -140,7 +140,7 @@ impl Event {
         })
     }
 
-    /// 解析异常类型消息
+    /// Parse an exception-type message
     fn parse_exception(frame: Frame) -> ParseResult<Self> {
         let exception_type = frame
             .headers

@@ -1,4 +1,4 @@
-//! Admin API 错误类型定义
+//! Admin API error type definitions
 
 use std::fmt;
 
@@ -6,19 +6,19 @@ use axum::http::StatusCode;
 
 use super::types::AdminErrorResponse;
 
-/// Admin 服务错误类型
+/// Admin service错误类型
 #[derive(Debug)]
 pub enum AdminServiceError {
-    /// 凭据不存在
+    /// Credential not found
     NotFound { id: u64 },
 
-    /// 上游服务调用失败（网络、API 错误等）
+    /// Upstream service call failed (network, API errors, etc.)
     UpstreamError(String),
 
-    /// 内部状态错误
+    /// Internal state error
     InternalError(String),
 
-    /// 凭据无效（验证失败）
+    /// Invalid credential (validation failed)
     InvalidCredential(String),
 }
 
@@ -26,11 +26,11 @@ impl fmt::Display for AdminServiceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AdminServiceError::NotFound { id } => {
-                write!(f, "凭据不存在: {}", id)
+                write!(f, "credential not found: {}", id)
             }
-            AdminServiceError::UpstreamError(msg) => write!(f, "上游服务错误: {}", msg),
-            AdminServiceError::InternalError(msg) => write!(f, "内部错误: {}", msg),
-            AdminServiceError::InvalidCredential(msg) => write!(f, "凭据无效: {}", msg),
+            AdminServiceError::UpstreamError(msg) => write!(f, "upstream service error: {}", msg),
+            AdminServiceError::InternalError(msg) => write!(f, "internal error: {}", msg),
+            AdminServiceError::InvalidCredential(msg) => write!(f, "invalid credential: {}", msg),
         }
     }
 }
@@ -38,7 +38,7 @@ impl fmt::Display for AdminServiceError {
 impl std::error::Error for AdminServiceError {}
 
 impl AdminServiceError {
-    /// 获取对应的 HTTP 状态码
+    /// Get the corresponding HTTP status code
     pub fn status_code(&self) -> StatusCode {
         match self {
             AdminServiceError::NotFound { .. } => StatusCode::NOT_FOUND,
@@ -48,7 +48,7 @@ impl AdminServiceError {
         }
     }
 
-    /// 转换为 API 错误响应
+    /// Convert to an API error response
     pub fn into_response(self) -> AdminErrorResponse {
         match &self {
             AdminServiceError::NotFound { .. } => AdminErrorResponse::not_found(self.to_string()),

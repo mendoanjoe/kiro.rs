@@ -1,37 +1,37 @@
-//! 对话类型定义
+//! Conversation type definitions
 //!
-//! 定义 Kiro API 中对话相关的类型，包括消息、历史记录等
+//! Defines conversation-related types in the Kiro API, including messages, history, etc.
 
 use serde::{Deserialize, Serialize};
 
 use super::tool::{Tool, ToolResult, ToolUseEntry};
 
-/// 对话状态
+/// Conversation state
 ///
-/// Kiro API 请求中的核心结构，包含当前消息和历史记录
+/// Core structure in Kiro API requests, containing the current message and history
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationState {
-    /// 代理延续 ID
+    /// Agent continuation ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_continuation_id: Option<String>,
-    /// 代理任务类型（通常为 "vibe"）
+    /// Agent task type (usually "vibe")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_task_type: Option<String>,
-    /// 聊天触发类型（"MANUAL" 或 "AUTO"）
+    /// Chat trigger type ("MANUAL" or "AUTO")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_trigger_type: Option<String>,
-    /// 当前消息
+    /// Current message
     pub current_message: CurrentMessage,
-    /// 会话 ID
+    /// Session ID
     pub conversation_id: String,
-    /// 历史消息列表
+    /// List of historical messages
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub history: Vec<Message>,
 }
 
 impl ConversationState {
-    /// 创建新的对话状态
+    /// Create a new conversation state
     pub fn new(conversation_id: impl Into<String>) -> Self {
         Self {
             agent_continuation_id: None,
@@ -43,38 +43,38 @@ impl ConversationState {
         }
     }
 
-    /// 设置代理延续 ID
+    /// Set the agent continuation ID
     pub fn with_agent_continuation_id(mut self, id: impl Into<String>) -> Self {
         self.agent_continuation_id = Some(id.into());
         self
     }
 
-    /// 设置代理任务类型
+    /// Set the agent task type
     pub fn with_agent_task_type(mut self, task_type: impl Into<String>) -> Self {
         self.agent_task_type = Some(task_type.into());
         self
     }
 
-    /// 设置聊天触发类型
+    /// Set the chat trigger type
     pub fn with_chat_trigger_type(mut self, trigger_type: impl Into<String>) -> Self {
         self.chat_trigger_type = Some(trigger_type.into());
         self
     }
 
-    /// 设置当前消息
+    /// Set the current message
     pub fn with_current_message(mut self, message: CurrentMessage) -> Self {
         self.current_message = message;
         self
     }
 
-    /// 添加历史消息
+    /// Add history messages
     pub fn with_history(mut self, history: Vec<Message>) -> Self {
         self.history = history;
         self
     }
 }
 
-/// 当前消息容器
+/// Current message容器
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurrentMessage {
@@ -144,7 +144,7 @@ impl UserInputMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInputMessageContext {
-    /// 工具执行结果列表
+    /// Tool execution result列表
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tool_results: Vec<ToolResult>,
     /// 可用工具列表
@@ -281,7 +281,7 @@ impl UserMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryAssistantMessage {
-    /// 助手响应消息
+    /// Assistant response消息
     pub assistant_response_message: AssistantMessage,
 }
 
@@ -300,7 +300,7 @@ impl HistoryAssistantMessage {
 pub struct AssistantMessage {
     /// 响应内容
     pub content: String,
-    /// 工具使用列表
+    /// Tool use列表
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_uses: Option<Vec<ToolUseEntry>>,
 }

@@ -1,4 +1,4 @@
-//! Admin API 路由配置
+//! Admin API route configuration
 
 use axum::{
     Router, middleware,
@@ -14,22 +14,22 @@ use super::{
     middleware::{AdminState, admin_auth_middleware},
 };
 
-/// 创建 Admin API 路由
+/// Create Admin API routes
 ///
-/// # 端点
-/// - `GET /credentials` - 获取所有凭据状态
-/// - `POST /credentials` - 添加新凭据
-/// - `DELETE /credentials/:id` - 删除凭据
-/// - `POST /credentials/:id/disabled` - 设置凭据禁用状态
-/// - `POST /credentials/:id/priority` - 设置凭据优先级
-/// - `POST /credentials/:id/reset` - 重置失败计数
-/// - `POST /credentials/:id/refresh` - 强制刷新 Token
-/// - `GET /credentials/:id/balance` - 获取凭据余额
-/// - `GET /config/load-balancing` - 获取负载均衡模式
-/// - `PUT /config/load-balancing` - 设置负载均衡模式
+/// # Endpoints
+/// - `GET /credentials` - Get all credential statuses
+/// - `POST /credentials` - Add a new credential
+/// - `DELETE /credentials/:id` - Delete a credential
+/// - `POST /credentials/:id/disabled` - Set credential disabled state
+/// - `POST /credentials/:id/priority` - Set credential priority
+/// - `POST /credentials/:id/reset` - Reset failure count
+/// - `POST /credentials/:id/refresh` - Force-refresh token
+/// - `GET /credentials/:id/balance` - Get credential balance
+/// - `GET /config/load-balancing` - Get load balancing mode
+/// - `PUT /config/load-balancing` - Set load balancing mode
 ///
-/// # 认证
-/// 需要 Admin API Key 认证，支持：
+/// # Authentication
+/// Requires Admin API Key authentication, supports:
 /// - `x-api-key` header
 /// - `Authorization: Bearer <token>` header
 pub fn create_admin_router(state: AdminState) -> Router {

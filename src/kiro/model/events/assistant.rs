@@ -1,6 +1,6 @@
-//! 助手响应事件
+//! Assistant response event
 //!
-//! 处理 assistantResponseEvent 类型的事件
+//! Handles assistantResponseEvent type events
 
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +9,7 @@ use crate::kiro::parser::frame::Frame;
 
 use super::base::EventPayload;
 
-/// 助手响应事件
+/// Assistant response event
 ///
 /// 包含 AI 助手的流式响应内容
 ///
@@ -30,11 +30,11 @@ use super::base::EventPayload;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssistantResponseEvent {
-    /// 响应内容片段
+    /// Response content chunk
     #[serde(default)]
     pub content: String,
 
-    /// 捕获其他未使用的字段，确保反序列化兼容性
+    /// Captures other unused fields to ensure deserialization compatibility
     #[serde(flatten)]
     #[serde(skip_serializing)]
     #[allow(dead_code)]
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_with_extra_fields() {
-        // 确保包含额外字段时反序列化不会失败
+        // Ensure deserialization does not fail when extra fields are present
         let json = r#"{
             "content": "Done",
             "conversationId": "conv-123",
@@ -100,7 +100,7 @@ mod tests {
 
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("\"content\":\"Test\""));
-        // extra 字段不应该被序列化
+        // The extra field should not be serialized
         assert!(!json.contains("extra"));
     }
 

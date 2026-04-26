@@ -114,7 +114,7 @@ pub async fn force_refresh_token(
 ) -> impl IntoResponse {
     match state.service.force_refresh_token(id).await {
         Ok(_) => Json(SuccessResponse::new(format!(
-            "凭据 #{} Token 已强制刷新",
+            "Credential #{} token has been force-refreshed",
             id
         )))
         .into_response(),

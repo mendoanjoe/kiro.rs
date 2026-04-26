@@ -1,6 +1,6 @@
-//! 上下文使用率事件
+//! Context usage event
 //!
-//! 处理 contextUsageEvent 类型的事件
+//! Handles contextUsageEvent type events
 
 use serde::Deserialize;
 
@@ -9,13 +9,13 @@ use crate::kiro::parser::frame::Frame;
 
 use super::base::EventPayload;
 
-/// 上下文使用率事件
+/// Context usage event
 ///
-/// 包含当前上下文窗口的使用百分比
+/// Contains the usage percentage of the current context window
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextUsageEvent {
-    /// 上下文使用百分比 (0-100)
+    /// Context usage percentage (0-100)
     #[serde(default)]
     pub context_usage_percentage: f64,
 }
@@ -27,7 +27,7 @@ impl EventPayload for ContextUsageEvent {
 }
 
 impl ContextUsageEvent {
-    /// 获取格式化的百分比字符串
+    /// Get the formatted percentage string
     pub fn formatted_percentage(&self) -> String {
         format!("{:.2}%", self.context_usage_percentage)
     }

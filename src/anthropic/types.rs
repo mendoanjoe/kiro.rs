@@ -201,7 +201,7 @@ pub struct SystemMessage {
     pub text: String,
 }
 
-/// 工具定义
+/// Tool definition
 ///
 /// 支持两种格式：
 /// 1. 普通工具：{ name, description, input_schema }
@@ -211,10 +211,10 @@ pub struct Tool {
     /// 工具类型，如 "web_search_20250305"（可选，仅 WebSearch 工具）
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub tool_type: Option<String>,
-    /// 工具名称
+    /// Tool name
     #[serde(default)]
     pub name: String,
-    /// 工具描述（普通工具必需，WebSearch 工具可选）
+    /// Tool description（普通工具必需，WebSearch 工具可选）
     #[serde(default)]
     pub description: String,
     /// 输入参数 schema（普通工具必需，WebSearch 工具无此字段）

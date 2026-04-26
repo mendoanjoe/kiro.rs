@@ -1,10 +1,10 @@
-//! Kiro 端点抽象
+//! Kiro endpoint abstraction
 //!
-//! 不同 Kiro 端点（如 `ide` / `cli`）在 URL、请求头、请求体上存在差异，
-//! 但共享凭据池、Token 刷新、重试逻辑和 AWS event-stream 响应解码。
+//! Different Kiro endpoints (e.g. `ide` / `cli`) differ in URL, request headers, and request body,
+//! but share the credential pool, token refresh, retry logic, and AWS event-stream response decoding.
 //!
-//! [`KiroEndpoint`] 抽象了请求侧的差异点；`KiroProvider` 持有一个 endpoint 注册表，
-//! 按凭据的 `endpoint` 字段选择对应实现。
+//! [`KiroEndpoint`] abstracts the request-side differences; `KiroProvider` holds an endpoint registry
+//! and selects the implementation based on the credential's `endpoint` field.
 
 use reqwest::RequestBuilder;
 
@@ -15,11 +15,11 @@ pub mod ide;
 
 pub use ide::IdeEndpoint;
 
-/// Kiro 端点
+/// Kiro endpoint
 ///
-/// 同一个 `KiroProvider` 可持有多个 endpoint 实现，按凭据级字段切换。
+/// A single `KiroProvider` can hold multiple endpoint implementations, switched via credential-level fields.
 pub trait KiroEndpoint: Send + Sync {
-    /// 端点名称（对应 credentials.endpoint / config.defaultEndpoint 的取值）
+    /// Endpoint name (corresponds to the value of credentials.endpoint / config.defaultEndpoint)
     fn name(&self) -> &'static str;
 
     /// API endpoint URL
@@ -28,51 +28,51 @@ pub trait KiroEndpoint: Send + Sync {
     /// MCP endpoint URL
     fn mcp_url(&self, ctx: &RequestContext<'_>) -> String;
 
-    /// 装饰 API 请求的端点特有 header
+    /// Decorate the API request with endpoint-specific headers
     ///
-    /// Provider 已经设置好 URL、content-type、Connection 和 body；
-    /// 实现负责追加 Authorization、host、user-agent 等端点相关头。
+    /// The provider has already set the URL, content-type, Connection, and body;
+    /// the implementation is responsible for appending Authorization, host, user-agent, and other endpoint-specific headers.
     fn decorate_api(&self, req: RequestBuilder, ctx: &RequestContext<'_>) -> RequestBuilder;
 
-    /// 装饰 MCP 请求的端点特有 header
+    /// Decorate the MCP request with endpoint-specific headers
     fn decorate_mcp(&self, req: RequestBuilder, ctx: &RequestContext<'_>) -> RequestBuilder;
 
-    /// 对已序列化的 API 请求体做端点特有加工（如注入 profileArn）
+    /// Apply endpoint-specific processing to the serialized API request body (e.g. inject profileArn)
     fn transform_api_body(&self, body: &str, ctx: &RequestContext<'_>) -> String;
 
-    /// 对已序列化的 MCP 请求体做端点特有加工（默认不变）
+    /// Apply endpoint-specific processing to the serialized MCP request body (default: unchanged)
     fn transform_mcp_body(&self, body: &str, _ctx: &RequestContext<'_>) -> String {
         body.to_string()
     }
 
-    /// 判断响应体是否表示"月度配额用尽"（禁用凭据并转移）
+    /// Check whether the response body indicates "monthly quota exhausted" (disables and switches the credential)
     fn is_monthly_request_limit(&self, body: &str) -> bool {
         default_is_monthly_request_limit(body)
     }
 
-    /// 判断响应体是否表示"上游 bearer token 失效"（触发强制刷新）
+    /// Check whether the response body indicates "upstream bearer token invalid" (triggers a force-refresh)
     fn is_bearer_token_invalid(&self, body: &str) -> bool {
         default_is_bearer_token_invalid(body)
     }
 }
 
-/// 装饰请求时可用的上下文
+/// Context available when decorating a request
 ///
-/// 包含单次调用已确定的所有运行时信息。引用形式避免无谓 clone。
+/// Contains all runtime information determined for a single call. Uses references to avoid unnecessary cloning.
 pub struct RequestContext<'a> {
-    /// 当前凭据
+    /// Current credential
     pub credentials: &'a KiroCredentials,
-    /// 有效的 access token（API Key 凭据下即 kiroApiKey）
+    /// Effective access token (for API Key credentials this is kiroApiKey)
     pub token: &'a str,
-    /// 当前凭据对应的 machineId
+    /// Current credential对应的 machineId
     pub machine_id: &'a str,
-    /// 全局配置
+    /// Global configuration
     pub config: &'a Config,
 }
 
-/// 默认的 MONTHLY_REQUEST_COUNT 判断逻辑
+/// Default MONTHLY_REQUEST_COUNT detection logic
 ///
-/// 同时识别顶层 `reason` 字段和嵌套 `error.reason` 字段。
+/// Recognizes both the top-level `reason` field and the nested `error.reason` field.
 pub fn default_is_monthly_request_limit(body: &str) -> bool {
     if body.contains("MONTHLY_REQUEST_COUNT") {
         return true;
@@ -96,7 +96,7 @@ pub fn default_is_monthly_request_limit(body: &str) -> bool {
         .is_some_and(|v| v == "MONTHLY_REQUEST_COUNT")
 }
 
-/// 默认的 bearer token 失效判断逻辑
+/// Default bearer token invalid detection logic
 pub fn default_is_bearer_token_invalid(body: &str) -> bool {
     body.contains("The bearer token included in the request is invalid")
 }

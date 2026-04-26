@@ -1,88 +1,88 @@
-//! 使用额度查询数据模型
+//! Usage limits query data model
 //!
-//! 包含 getUsageLimits API 的响应类型定义
+//! Contains response type definitions for the getUsageLimits API
 
 use serde::Deserialize;
 
-/// 使用额度查询响应
+/// Usage limits query response
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageLimitsResponse {
-    /// 下次重置日期 (Unix 时间戳)
+    /// Next reset date (Unix timestamp)
     #[serde(default)]
     pub next_date_reset: Option<f64>,
 
-    /// 订阅信息
+    /// Subscription information
     #[serde(default)]
     pub subscription_info: Option<SubscriptionInfo>,
 
-    /// 使用量明细列表
+    /// Usage breakdown list
     #[serde(default)]
     pub usage_breakdown_list: Vec<UsageBreakdown>,
 }
 
-/// 订阅信息
+/// Subscription information
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionInfo {
-    /// 订阅标题 (KIRO PRO+ / KIRO FREE 等)
+    /// Subscription title (KIRO PRO+ / KIRO FREE, etc.)
     #[serde(default)]
     pub subscription_title: Option<String>,
 }
 
-/// 使用量明细
+/// Usage breakdown
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct UsageBreakdown {
-    /// 当前使用量
+    /// Current usage
     #[serde(default)]
     pub current_usage: i64,
 
-    /// 当前使用量（精确值）
+    /// Current usage（精确值）
     #[serde(default)]
     pub current_usage_with_precision: f64,
 
-    /// 奖励额度列表
+    /// Bonus quota list
     #[serde(default)]
     pub bonuses: Vec<Bonus>,
 
-    /// 免费试用信息
+    /// Free trial information
     #[serde(default)]
     pub free_trial_info: Option<FreeTrialInfo>,
 
-    /// 下次重置日期 (Unix 时间戳)
+    /// Next reset date (Unix timestamp)
     #[serde(default)]
     pub next_date_reset: Option<f64>,
 
-    /// 使用限额
+    /// Usage limit
     #[serde(default)]
     pub usage_limit: i64,
 
-    /// 使用限额（精确值）
+    /// Usage limit（精确值）
     #[serde(default)]
     pub usage_limit_with_precision: f64,
 }
 
-/// 奖励额度
+/// Bonus quota
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bonus {
-    /// 当前使用量
+    /// Current usage
     #[serde(default)]
     pub current_usage: f64,
 
-    /// 使用限额
+    /// Usage limit
     #[serde(default)]
     pub usage_limit: f64,
 
-    /// 状态 (ACTIVE / EXPIRED)
+    /// Status (ACTIVE / EXPIRED)
     #[serde(default)]
     pub status: Option<String>,
 }
 
 impl Bonus {
-    /// 检查 bonus 是否处于激活状态
+    /// Check whether the bonus is active
     pub fn is_active(&self) -> bool {
         self.status
             .as_deref()
@@ -91,40 +91,40 @@ impl Bonus {
     }
 }
 
-/// 免费试用信息
+/// Free trial information
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct FreeTrialInfo {
-    /// 当前使用量
+    /// Current usage
     #[serde(default)]
     pub current_usage: i64,
 
-    /// 当前使用量（精确值）
+    /// Current usage（精确值）
     #[serde(default)]
     pub current_usage_with_precision: f64,
 
-    /// 免费试用过期时间 (Unix 时间戳)
+    /// Free trial expiry time (Unix timestamp)
     #[serde(default)]
     pub free_trial_expiry: Option<f64>,
 
-    /// 免费试用状态 (ACTIVE / EXPIRED)
+    /// Free trial status (ACTIVE / EXPIRED)
     #[serde(default)]
     pub free_trial_status: Option<String>,
 
-    /// 使用限额
+    /// Usage limit
     #[serde(default)]
     pub usage_limit: i64,
 
-    /// 使用限额（精确值）
+    /// Usage limit（精确值）
     #[serde(default)]
     pub usage_limit_with_precision: f64,
 }
 
-// ============ 便捷方法实现 ============
+// ============ Convenience Method Implementations ============
 
 impl FreeTrialInfo {
-    /// 检查免费试用是否处于激活状态
+    /// Check whether the free trial is active
     pub fn is_active(&self) -> bool {
         self.free_trial_status
             .as_deref()
@@ -134,21 +134,21 @@ impl FreeTrialInfo {
 }
 
 impl UsageLimitsResponse {
-    /// 获取订阅标题
+    /// Get the subscription title
     pub fn subscription_title(&self) -> Option<&str> {
         self.subscription_info
             .as_ref()
             .and_then(|info| info.subscription_title.as_deref())
     }
 
-    /// 获取第一个使用量明细
+    /// Get the first usage breakdown entry
     fn primary_breakdown(&self) -> Option<&UsageBreakdown> {
         self.usage_breakdown_list.first()
     }
 
-    /// 获取总使用限额（精确值）
+    /// Get the total usage limit (precise value)
     ///
-    /// 累加基础额度、激活的免费试用额度和激活的奖励额度
+    /// Accumulates the base quota, active free-trial quota, and active bonus quota
     pub fn usage_limit(&self) -> f64 {
         let Some(breakdown) = self.primary_breakdown() else {
             return 0.0;
@@ -156,14 +156,14 @@ impl UsageLimitsResponse {
 
         let mut total = breakdown.usage_limit_with_precision;
 
-        // 累加激活的 free trial 额度
+        // Accumulate active free trial quota
         if let Some(trial) = &breakdown.free_trial_info {
             if trial.is_active() {
                 total += trial.usage_limit_with_precision;
             }
         }
 
-        // 累加激活的 bonus 额度
+        // Accumulate active bonus quota
         for bonus in &breakdown.bonuses {
             if bonus.is_active() {
                 total += bonus.usage_limit;
@@ -173,9 +173,9 @@ impl UsageLimitsResponse {
         total
     }
 
-    /// 获取总当前使用量（精确值）
+    /// Get the total current usage (precise value)
     ///
-    /// 累加基础使用量、激活的免费试用使用量和激活的奖励使用量
+    /// Accumulates the base usage, active free-trial usage, and active bonus usage
     pub fn current_usage(&self) -> f64 {
         let Some(breakdown) = self.primary_breakdown() else {
             return 0.0;
@@ -183,14 +183,14 @@ impl UsageLimitsResponse {
 
         let mut total = breakdown.current_usage_with_precision;
 
-        // 累加激活的 free trial 使用量
+        // Accumulate active free trial usage
         if let Some(trial) = &breakdown.free_trial_info {
             if trial.is_active() {
                 total += trial.current_usage_with_precision;
             }
         }
 
-        // 累加激活的 bonus 使用量
+        // Accumulate active bonus usage
         for bonus in &breakdown.bonuses {
             if bonus.is_active() {
                 total += bonus.current_usage;

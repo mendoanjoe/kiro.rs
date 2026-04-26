@@ -121,7 +121,7 @@ pub fn get_context_window_size(model: &str) -> i32 {
 pub struct ConversionResult {
     /// 转换后的 Kiro 请求
     pub conversation_state: ConversationState,
-    /// 工具名称映射（短名称 → 原始名称），仅当存在超长工具名时非空
+    /// Tool name映射（短名称 → 原始名称），仅当存在超长工具名时非空
     pub tool_name_map: HashMap<String, String>,
 }
 

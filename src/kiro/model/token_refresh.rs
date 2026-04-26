@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-/// 刷新 Token 的请求体 (Social 认证)
+/// Refresh token 的请求体 (Social 认证)
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
-/// 刷新 Token 的响应体 (Social 认证)
+/// Refresh token 的响应体 (Social 认证)
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshResponse {
@@ -20,7 +20,7 @@ pub struct RefreshResponse {
     pub expires_in: Option<i64>,
 }
 
-/// IdC Token 刷新请求体 (AWS SSO OIDC)
+/// IdC token refresh request body (AWS SSO OIDC)
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdcRefreshRequest {
@@ -30,7 +30,7 @@ pub struct IdcRefreshRequest {
     pub grant_type: String,
 }
 
-/// IdC Token 刷新响应体 (AWS SSO OIDC)
+/// IdC token refresh response body (AWS SSO OIDC)
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdcRefreshResponse {

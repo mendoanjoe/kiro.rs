@@ -1,4 +1,4 @@
-//! Kiro API 客户端模块
+//! Kiro API client module
 
 pub mod endpoint;
 pub mod machine_id;

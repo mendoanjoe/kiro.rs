@@ -1,6 +1,6 @@
-//! 请求类型模块
+//! Request types module
 //!
-//! 包含 Kiro API 请求相关的类型定义
+//! Contains type definitions for Kiro API requests
 
 pub mod conversation;
 pub mod kiro;

@@ -1,4 +1,4 @@
-//! Anthropic API 中间件
+//! Anthropic API middleware
 
 use std::sync::Arc;
 
@@ -15,20 +15,20 @@ use crate::kiro::provider::KiroProvider;
 
 use super::types::ErrorResponse;
 
-/// 应用共享状态
+/// Application shared state
 #[derive(Clone)]
 pub struct AppState {
-    /// API 密钥
+    /// API key
     pub api_key: String,
-    /// Kiro Provider（可选，用于实际 API 调用）
-    /// 内部使用 MultiTokenManager，已支持线程安全的多凭据管理
+    /// Kiro Provider (optional, used for actual API calls)
+    /// Internally uses MultiTokenManager, which supports thread-safe multi-credential management
     pub kiro_provider: Option<Arc<KiroProvider>>,
-    /// 是否开启非流式响应的 thinking 块提取
+    /// Whether to enable thinking block extraction for non-streaming responses
     pub extract_thinking: bool,
 }
 
 impl AppState {
-    /// 创建新的应用状态
+    /// Create new application state
     pub fn new(api_key: impl Into<String>, extract_thinking: bool) -> Self {
         Self {
             api_key: api_key.into(),
@@ -37,14 +37,14 @@ impl AppState {
         }
     }
 
-    /// 设置 KiroProvider
+    /// Set the KiroProvider
     pub fn with_kiro_provider(mut self, provider: KiroProvider) -> Self {
         self.kiro_provider = Some(Arc::new(provider));
         self
     }
 }
 
-/// API Key 认证中间件
+/// API Key authentication middleware
 pub async fn auth_middleware(
     State(state): State<AppState>,
     request: Request<Body>,
@@ -59,15 +59,15 @@ pub async fn auth_middleware(
     }
 }
 
-/// CORS 中间件层
+/// CORS middleware layer
 ///
-/// **安全说明**：当前配置允许所有来源（Any），这是为了支持公开 API 服务。
-/// 如果需要更严格的安全控制，请根据实际需求配置具体的允许来源、方法和头信息。
+/// **Security Note**: The current configuration allows all origins (Any) to support public API services.
+/// For stricter security, configure specific allowed origins, methods, and headers as needed.
 ///
-/// # 配置说明
-/// - `allow_origin(Any)`: 允许任何来源的请求
-/// - `allow_methods(Any)`: 允许任何 HTTP 方法
-/// - `allow_headers(Any)`: 允许任何请求头
+/// # Configuration Notes
+/// - `allow_origin(Any)`: allows requests from any origin
+/// - `allow_methods(Any)`: allows any HTTP method
+/// - `allow_headers(Any)`: allows any request header
 pub fn cors_layer() -> tower_http::cors::CorsLayer {
     use tower_http::cors::{Any, CorsLayer};
 

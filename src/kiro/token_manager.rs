@@ -1,7 +1,7 @@
-//! Token 管理模块
+//! Token management module
 //!
-//! 负责 Token 过期检测和刷新，支持 Social 和 IdC 认证方式
-//! 支持多凭据 (MultiTokenManager) 管理
+//! Handles token expiry detection and refresh, supporting Social and IdC authentication
+//! Supports multi-credential (MultiTokenManager) management
 
 use anyhow::bail;
 use chrono::{DateTime, Duration, Utc};
@@ -25,7 +25,7 @@ use crate::kiro::model::token_refresh::{
 use crate::kiro::model::usage_limits::UsageLimitsResponse;
 use crate::model::config::Config;
 
-/// 检查 Token 是否在指定时间内过期
+/// Checks whether the token expires within the specified duration
 pub(crate) fn is_token_expiring_within(
     credentials: &KiroCredentials,
     minutes: i64,
@@ -37,12 +37,12 @@ pub(crate) fn is_token_expiring_within(
         .map(|expires| expires <= Utc::now() + Duration::minutes(minutes))
 }
 
-/// 检查 Token 是否已过期（提前 5 分钟判断）
+/// Checks whether the token has expired (with a 5-minute early cutoff)
 pub(crate) fn is_token_expired(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 5).unwrap_or(true)
 }
 
-/// 检查 Token 是否即将过期（10分钟内）
+/// Checks whether the token is expiring soon (within 10 minutes)
 pub(crate) fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 10).unwrap_or(false)
 }
@@ -54,7 +54,7 @@ fn sha256_hex(input: &str) -> String {
     format!("{:x}", result)
 }
 
-/// 生成 API Key 脱敏展示(前 4 + ... + 后 4,长度不足或非 ASCII 回退 ***)
+/// Generates a masked API key display (first 4 + ... + last 4; falls back to *** for short or non-ASCII keys)
 fn mask_api_key(key: &str) -> String {
     if key.is_ascii() && key.len() > 16 {
         format!("{}...{}", &key[..4], &key[key.len() - 4..])
@@ -63,22 +63,22 @@ fn mask_api_key(key: &str) -> String {
     }
 }
 
-/// 验证 refreshToken 的基本有效性
+/// Validates the basic validity of the refreshToken
 pub(crate) fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
     let refresh_token = credentials
         .refresh_token
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("缺少 refreshToken"))?;
+        .ok_or_else(|| anyhow::anyhow!("missing refreshToken"))?;
 
     if refresh_token.is_empty() {
-        bail!("refreshToken 为空");
+        bail!("refreshToken is empty");
     }
 
     if refresh_token.len() < 100 || refresh_token.ends_with("...") || refresh_token.contains("...")
     {
         bail!(
-            "refreshToken 已被截断（长度: {} 字符）。\n\
-             这通常是 Kiro IDE 为了防止凭证被第三方工具使用而故意截断的。",
+            "refreshToken has been truncated (length: {} chars).\n\
+             This is usually intentional by Kiro IDE to prevent credentials from being used by third-party tools.",
             refresh_token.len()
         );
     }
@@ -86,10 +86,10 @@ pub(crate) fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::R
     Ok(())
 }
 
-/// Refresh Token 永久失效错误
+/// Refresh token permanently invalid error
 ///
-/// 当服务端返回 400 + `invalid_grant` 时，表示 refreshToken 已被撤销或过期，
-/// 不应重试，需立即禁用对应凭据。
+/// Raised when the server returns 400 + `invalid_grant`, indicating the refreshToken has been revoked or expired,
+/// and the request should not be retried; the associated credential must be disabled immediately.
 #[derive(Debug)]
 pub(crate) struct RefreshTokenInvalidError {
     pub message: String,
@@ -103,23 +103,23 @@ impl fmt::Display for RefreshTokenInvalidError {
 
 impl std::error::Error for RefreshTokenInvalidError {}
 
-/// 刷新 Token
+/// Refresh token
 pub(crate) async fn refresh_token(
     credentials: &KiroCredentials,
     config: &Config,
     proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<KiroCredentials> {
-    // API Key 凭据不支持 Token 刷新：底层契约级拦截
-    // 其他调用点（try_ensure_token / 活跃路径 / add_credential）在调用前已显式分流 API Key；
-    // 仅 force_refresh_token_for 未分流，此处 bail 让错误自然传播为 400 BAD_REQUEST。
+    // API Key credentials do not support token refresh: contract-level interception at the base layer
+    // Other call sites (try_ensure_token / active path / add_credential) explicitly branch API Key before calling;
+    // only force_refresh_token_for does not branch; bail here lets the error propagate naturally as 400 BAD_REQUEST.
     if credentials.is_api_key_credential() {
-        bail!("API Key 凭据不支持刷新 Token");
+        bail!("API Key credentials do not support token refresh");
     }
 
     validate_refresh_token(credentials)?;
 
-    // 根据 auth_method 选择刷新方式
-    // 如果未指定 auth_method，根据是否有 clientId/clientSecret 自动判断
+    // Select refresh method based on auth_method
+    // If auth_method is not specified, auto-detect from presence of clientId/clientSecret
     let auth_method = credentials.auth_method.as_deref().unwrap_or_else(|| {
         if credentials.client_id.is_some() && credentials.client_secret.is_some() {
             "idc"
@@ -138,16 +138,16 @@ pub(crate) async fn refresh_token(
     }
 }
 
-/// 刷新 Social Token
+/// Refresh Social token
 async fn refresh_social_token(
     credentials: &KiroCredentials,
     config: &Config,
     proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<KiroCredentials> {
-    tracing::info!("正在刷新 Social Token...");
+    tracing::info!("Refreshing Social token...");
 
     let refresh_token = credentials.refresh_token.as_ref().unwrap();
-    // 优先级：凭据.auth_region > 凭据.region > config.auth_region > config.region
+    // Priority: credential.auth_region > credential.region > config.auth_region > config.region
     let region = credentials.effective_auth_region(config);
 
     let refresh_url = format!("https://prod.{}.auth.desktop.kiro.dev/refreshToken", region);
@@ -179,23 +179,23 @@ async fn refresh_social_token(
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
 
-        // 400 + invalid_grant + Invalid refresh token provided → refreshToken 永久失效
+        // 400 + invalid_grant + Invalid refresh token provided → refreshToken is permanently invalid
         if status.as_u16() == 400
             && body_text.contains("\"invalid_grant\"")
             && body_text.contains("Invalid refresh token provided")
         {
             return Err(RefreshTokenInvalidError {
-                message: format!("Social refreshToken 已失效 (invalid_grant): {}", body_text),
+                message: format!("Social refreshToken has expired (invalid_grant): {}", body_text),
             }
             .into());
         }
 
         let error_msg = match status.as_u16() {
-            401 => "OAuth 凭证已过期或无效，需要重新认证",
-            403 => "权限不足，无法刷新 Token",
-            429 => "请求过于频繁，已被限流",
-            500..=599 => "服务器错误，AWS OAuth 服务暂时不可用",
-            _ => "Token 刷新失败",
+            401 => "OAuth credentials have expired or are invalid; re-authentication is required",
+            403 => "insufficient permissions to refresh the token",
+            429 => "too many requests; rate limited",
+            500..=599 => "server error; AWS OAuth service temporarily unavailable",
+            _ => "token refresh failed",
         };
         bail!("{}: {} {}", error_msg, status, body_text);
     }
@@ -221,25 +221,25 @@ async fn refresh_social_token(
     Ok(new_credentials)
 }
 
-/// 刷新 IdC Token (AWS SSO OIDC)
+/// Refresh IdC token (AWS SSO OIDC)
 async fn refresh_idc_token(
     credentials: &KiroCredentials,
     config: &Config,
     proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<KiroCredentials> {
-    tracing::info!("正在刷新 IdC Token...");
+    tracing::info!("Refreshing IdC token...");
 
     let refresh_token = credentials.refresh_token.as_ref().unwrap();
     let client_id = credentials
         .client_id
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("IdC 刷新需要 clientId"))?;
+        .ok_or_else(|| anyhow::anyhow!("IdC refresh requires clientId"))?;
     let client_secret = credentials
         .client_secret
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("IdC 刷新需要 clientSecret"))?;
+        .ok_or_else(|| anyhow::anyhow!("IdC refresh requires clientSecret"))?;
 
-    // 优先级：凭据.auth_region > 凭据.region > config.auth_region > config.region
+    // Priority: credential.auth_region > credential.region > config.auth_region > config.region
     let region = credentials.effective_auth_region(config);
     let refresh_url = format!("https://oidc.{}.amazonaws.com/token", region);
     let os_name = &config.system_version;
@@ -276,23 +276,23 @@ async fn refresh_idc_token(
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
 
-        // 400 + invalid_grant + Invalid refresh token provided → refreshToken 永久失效
+        // 400 + invalid_grant + Invalid refresh token provided → refreshToken is permanently invalid
         if status.as_u16() == 400
             && body_text.contains("\"invalid_grant\"")
             && body_text.contains("Invalid refresh token provided")
         {
             return Err(RefreshTokenInvalidError {
-                message: format!("IdC refreshToken 已失效 (invalid_grant): {}", body_text),
+                message: format!("IdC refreshToken has expired (invalid_grant): {}", body_text),
             }
             .into());
         }
 
         let error_msg = match status.as_u16() {
-            401 => "IdC 凭证已过期或无效，需要重新认证",
-            403 => "权限不足，无法刷新 Token",
-            429 => "请求过于频繁，已被限流",
-            500..=599 => "服务器错误，AWS OIDC 服务暂时不可用",
-            _ => "IdC Token 刷新失败",
+            401 => "IdC credentials have expired or are invalid; re-authentication is required",
+            403 => "insufficient permissions to refresh the token",
+            429 => "too many requests; rate limited",
+            500..=599 => "server error; AWS OIDC service temporarily unavailable",
+            _ => "IdC token refresh failed",
         };
         bail!("{}: {} {}", error_msg, status, body_text);
     }
@@ -311,7 +311,7 @@ async fn refresh_idc_token(
         new_credentials.expires_at = Some(expires_at.to_rfc3339());
     }
 
-    // 同步更新 profile_arn（如果 IdC 响应中包含）
+    // Synchronously update profile_arn (if included in IdC response)
     if let Some(profile_arn) = data.profile_arn {
         new_credentials.profile_arn = Some(profile_arn);
     }
@@ -319,16 +319,16 @@ async fn refresh_idc_token(
     Ok(new_credentials)
 }
 
-/// 获取使用额度信息
+/// Fetch usage limit information
 pub(crate) async fn get_usage_limits(
     credentials: &KiroCredentials,
     config: &Config,
     token: &str,
     proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<UsageLimitsResponse> {
-    tracing::debug!("正在获取使用额度信息...");
+    tracing::debug!("Fetching usage limit information...");
 
-    // 优先级：凭据.api_region > config.api_region > config.region
+    // Priority: credential.api_region > config.api_region > config.region
     let region = credentials.effective_api_region(config);
     let host = format!("q.{}.amazonaws.com", region);
     let machine_id = machine_id::generate_from_credentials(credentials, config);
@@ -336,18 +336,18 @@ pub(crate) async fn get_usage_limits(
     let os_name = &config.system_version;
     let node_version = &config.node_version;
 
-    // 构建 URL
+    // Build URL
     let mut url = format!(
         "https://{}/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST",
         host
     );
 
-    // profileArn 是可选的
+    // profileArn is optional
     if let Some(profile_arn) = &credentials.profile_arn {
         url.push_str(&format!("&profileArn={}", urlencoding::encode(profile_arn)));
     }
 
-    // 构建 User-Agent headers
+    // Build User-Agent headers
     let user_agent = format!(
         "aws-sdk-js/1.0.0 ua/2.1 os/{} lang/js md/nodejs#{} api/codewhispererruntime#1.0.0 m/N,E KiroIDE-{}-{}",
         os_name, node_version, kiro_version, machine_id
@@ -379,11 +379,11 @@ pub(crate) async fn get_usage_limits(
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
         let error_msg = match status.as_u16() {
-            401 => "认证失败，Token 无效或已过期",
-            403 => "权限不足，无法获取使用额度",
-            429 => "请求过于频繁，已被限流",
-            500..=599 => "服务器错误，AWS 服务暂时不可用",
-            _ => "获取使用额度失败",
+            401 => "authentication failed; token is invalid or expired",
+            403 => "insufficient permissions to fetch usage quota",
+            429 => "too many requests; rate limited",
+            500..=599 => "server error; AWS service temporarily unavailable",
+            _ => "failed to fetch usage quota",
         };
         bail!("{}: {} {}", error_msg, status, body_text);
     }
@@ -393,47 +393,47 @@ pub(crate) async fn get_usage_limits(
 }
 
 // ============================================================================
-// 多凭据 Token 管理器
+// Multi-credential token manager
 // ============================================================================
 
-/// 单个凭据条目的状态
+/// State of a single credential entry
 struct CredentialEntry {
-    /// 凭据唯一 ID
+    /// Unique credential ID
     id: u64,
-    /// 凭据信息
+    /// Credential information
     credentials: KiroCredentials,
-    /// API 调用连续失败次数
+    /// Number of consecutive API call failures
     failure_count: u32,
-    /// Token 刷新连续失败次数
+    /// Number of consecutive token refresh failures
     refresh_failure_count: u32,
-    /// 是否已禁用
+    /// Whether this credential is disabled
     disabled: bool,
-    /// 禁用原因（用于区分手动禁用 vs 自动禁用，便于自愈）
+    /// Reason for disabling (distinguishes manual vs automatic disabling, for self-healing)
     disabled_reason: Option<DisabledReason>,
-    /// API 调用成功次数
+    /// Number of successful API calls
     success_count: u64,
-    /// 最后一次 API 调用时间（RFC3339 格式）
+    /// Timestamp of the last successful API call (RFC3339 format)
     last_used_at: Option<String>,
 }
 
-/// 禁用原因
+/// Reason for disabling
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DisabledReason {
-    /// Admin API 手动禁用
+    /// Manually disabled via Admin API
     Manual,
-    /// 连续失败达到阈值后自动禁用
+    /// Automatically disabled after consecutive failures exceeded the threshold
     TooManyFailures,
-    /// Token 刷新连续失败达到阈值后自动禁用
+    /// Automatically disabled after consecutive token refresh failures exceeded the threshold
     TooManyRefreshFailures,
-    /// 额度已用尽（如 MONTHLY_REQUEST_COUNT）
+    /// Quota exhausted (e.g. MONTHLY_REQUEST_COUNT)
     QuotaExceeded,
-    /// Refresh Token 永久失效（服务端返回 invalid_grant）
+    /// Refresh token permanently invalid (server returned invalid_grant)
     InvalidRefreshToken,
-    /// 凭据配置无效（如 authMethod=api_key 但缺少 kiroApiKey）
+    /// Invalid credential configuration (e.g. authMethod=api_key but kiroApiKey is missing)
     InvalidConfig,
 }
 
-/// 统计数据持久化条目
+/// Statistics data persistence entry
 #[derive(Serialize, Deserialize)]
 struct StatsEntry {
     success_count: u64,
@@ -441,90 +441,90 @@ struct StatsEntry {
 }
 
 // ============================================================================
-// Admin API 公开结构
+// Admin API public structures
 // ============================================================================
 
-/// 凭据条目快照（用于 Admin API 读取）
+/// Credential entry snapshot (for Admin API reads)
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialEntrySnapshot {
-    /// 凭据唯一 ID
+    /// Unique credential ID
     pub id: u64,
-    /// 优先级
+    /// Priority
     pub priority: u32,
-    /// 是否被禁用
+    /// Whether disabled
     pub disabled: bool,
-    /// 连续失败次数
+    /// Number of consecutive failures
     pub failure_count: u32,
-    /// 认证方式
+    /// Authentication method
     pub auth_method: Option<String>,
-    /// 是否有 Profile ARN
+    /// Whether a Profile ARN is present
     pub has_profile_arn: bool,
-    /// Token 过期时间
+    /// Token expiry time
     pub expires_at: Option<String>,
-    /// refreshToken 的 SHA-256 哈希（仅 OAuth 凭据，用于前端去重）
+    /// SHA-256 hash of the refreshToken (OAuth credentials only; used for deduplication on the frontend)
     pub refresh_token_hash: Option<String>,
-    /// kiroApiKey 的 SHA-256 哈希（仅 API Key 凭据，用于前端去重）
+    /// SHA-256 hash of kiroApiKey (API Key credentials only; used for deduplication on the frontend)
     pub api_key_hash: Option<String>,
-    /// kiroApiKey 的脱敏展示（仅 API Key 凭据，用于前端显示）
+    /// Masked display of kiroApiKey (API Key credentials only; shown on the frontend)
     pub masked_api_key: Option<String>,
-    /// 用户邮箱（用于前端显示）
+    /// User email (shown on the frontend)
     pub email: Option<String>,
-    /// API 调用成功次数
+    /// Number of successful API calls
     pub success_count: u64,
-    /// 最后一次 API 调用时间（RFC3339 格式）
+    /// Timestamp of the last successful API call (RFC3339 format)
     pub last_used_at: Option<String>,
-    /// 是否配置了凭据级代理
+    /// Whether a credential-level proxy is configured
     pub has_proxy: bool,
-    /// 代理 URL（用于前端展示）
+    /// Proxy URL (shown on the frontend)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
-    /// Token 刷新连续失败次数
+    /// Number of consecutive token refresh failures
     pub refresh_failure_count: u32,
-    /// 禁用原因
+    /// Reason for disabling
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
-    /// 端点名称（未显式配置时返回 None，由 Admin 层回退到默认值）
+    /// Endpoint name (returns None when not explicitly configured; Admin layer falls back to default)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
 }
 
-/// 凭据管理器状态快照
+/// Credential manager state snapshot
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManagerSnapshot {
-    /// 凭据条目列表
+    /// List of credential entries
     pub entries: Vec<CredentialEntrySnapshot>,
-    /// 当前活跃凭据 ID
+    /// Currently active credential ID
     pub current_id: u64,
-    /// 总凭据数量
+    /// Total number of credentials
     pub total: usize,
-    /// 可用凭据数量
+    /// Number of available credentials
     pub available: usize,
 }
 
-/// 多凭据 Token 管理器
+/// Multi-credential token manager
 ///
-/// 支持多个凭据的管理，实现固定优先级 + 故障转移策略
-/// 故障统计基于 API 调用结果，而非 Token 刷新结果
+/// Manages multiple credentials with fixed priority + failover strategy
+/// Failure counting is based on API call results, not token refresh results
 pub struct MultiTokenManager {
     config: Config,
     proxy: Option<ProxyConfig>,
-    /// 凭据条目列表
+    /// List of credential entries
     entries: Mutex<Vec<CredentialEntry>>,
-    /// 当前活动凭据 ID
+    /// Currently active credential ID
     current_id: Mutex<u64>,
-    /// Token 刷新锁，确保同一时间只有一个刷新操作
+    /// Token refresh lock; ensures only one refresh operation at a time
     refresh_lock: TokioMutex<()>,
-    /// 凭据文件路径（用于回写）
+    /// Path to the credentials file (for writeback)
     credentials_path: Option<PathBuf>,
-    /// 是否为多凭据格式（数组格式才回写）
+    /// Whether this is multi-credential format (writeback only for array format)
     is_multiple_format: bool,
-    /// 负载均衡模式（运行时可修改）
+    /// Load balancing mode (modifiable at runtime)
     load_balancing_mode: Mutex<String>,
-    /// 最近一次统计持久化时间（用于 debounce）
+    /// Timestamp of the most recent statistics persistence (for debouncing)
     last_stats_save_at: Mutex<Option<Instant>>,
-    /// 统计数据是否有未落盘更新
+    /// Whether there are pending statistics updates not yet flushed to disk
     stats_dirty: AtomicBool,
 }
 
@@ -533,29 +533,29 @@ const MAX_FAILURES_PER_CREDENTIAL: u32 = 3;
 /// 统计数据持久化防抖间隔
 const STATS_SAVE_DEBOUNCE: StdDuration = StdDuration::from_secs(30);
 
-/// API 调用上下文
+/// API call context
 ///
-/// 绑定特定凭据的调用上下文，确保 token、credentials 和 id 的一致性
-/// 用于解决并发调用时 current_id 竞态问题
+/// Call context bound to a specific credential; ensures consistency of token, credentials, and id
+/// Used to resolve current_id race conditions during concurrent calls
 #[derive(Clone)]
 pub struct CallContext {
-    /// 凭据 ID（用于 report_success/report_failure）
+    /// Credential ID (used for report_success/report_failure)
     pub id: u64,
-    /// 凭据信息（用于构建请求头）
+    /// Credential information（用于构建请求头）
     pub credentials: KiroCredentials,
-    /// 访问 Token
+    /// Access token
     pub token: String,
 }
 
 impl MultiTokenManager {
-    /// 创建多凭据 Token 管理器
+    /// Create a multi-credential token manager
     ///
     /// # Arguments
-    /// * `config` - 应用配置
-    /// * `credentials` - 凭据列表
-    /// * `proxy` - 可选的代理配置
-    /// * `credentials_path` - 凭据文件路径（用于回写）
-    /// * `is_multiple_format` - 是否为多凭据格式（数组格式才回写）
+    /// * `config` - Application configuration
+    /// * `credentials` - List of credentials
+    /// * `proxy` - Optional proxy configuration
+    /// * `credentials_path` - Path to the credentials file (for writeback)
+    /// * `is_multiple_format` - Whether this is multi-credential format (writeback only for array format)
     pub fn new(
         config: Config,
         credentials: Vec<KiroCredentials>,
@@ -563,7 +563,7 @@ impl MultiTokenManager {
         credentials_path: Option<PathBuf>,
         is_multiple_format: bool,
     ) -> anyhow::Result<Self> {
-        // 计算当前最大 ID，为没有 ID 的凭据分配新 ID
+        // Calculate the current max ID to assign new IDs to credentials without one
         let max_existing_id = credentials.iter().filter_map(|c| c.id).max().unwrap_or(0);
         let mut next_id = max_existing_id + 1;
         let mut has_new_ids = false;
@@ -603,7 +603,7 @@ impl MultiTokenManager {
             })
             .collect();
 
-        // 校验 API Key 凭据配置完整性：authMethod=api_key 时必须提供 kiroApiKey
+        // Validate API Key credential configuration: kiroApiKey is required when authMethod=api_key
         let mut entries = entries;
         for entry in &mut entries {
             if entry.credentials.kiro_api_key.is_none()
@@ -615,7 +615,7 @@ impl MultiTokenManager {
                     .unwrap_or(false)
             {
                 tracing::warn!(
-                    "凭据 #{} 配置了 authMethod=api_key 但缺少 kiroApiKey 字段，已自动禁用",
+                    "credential #{} has authMethod=api_key but is missing the kiroApiKey field; automatically disabled",
                     entry.id
                 );
                 entry.disabled = true;
@@ -623,7 +623,7 @@ impl MultiTokenManager {
             }
         }
 
-        // 检测重复 ID
+        // Detect duplicate IDs
         let mut seen_ids = std::collections::HashSet::new();
         let mut duplicate_ids = Vec::new();
         for entry in &entries {
@@ -632,10 +632,10 @@ impl MultiTokenManager {
             }
         }
         if !duplicate_ids.is_empty() {
-            anyhow::bail!("检测到重复的凭据 ID: {:?}", duplicate_ids);
+            anyhow::bail!("duplicate credential IDs detected: {:?}", duplicate_ids);
         }
 
-        // 选择初始凭据：优先级最高（priority 最小）的可用凭据，无可用凭据时为 0
+        // Select initial credential: highest-priority (lowest priority number) available credential, or 0 if none available
         let initial_id = entries
             .iter()
             .filter(|e| !e.disabled)
@@ -657,59 +657,59 @@ impl MultiTokenManager {
             stats_dirty: AtomicBool::new(false),
         };
 
-        // 如果有新分配的 ID 或新生成的 machineId，立即持久化到配置文件
+        // If new IDs or machineIds were assigned, persist immediately to the config file
         if has_new_ids || has_new_machine_ids {
             if let Err(e) = manager.persist_credentials() {
-                tracing::warn!("补全凭据 ID/machineId 后持久化失败: {}", e);
+                tracing::warn!("Failed to persist after completing credential ID/machineId: {}", e);
             } else {
-                tracing::info!("已补全凭据 ID/machineId 并写回配置文件");
+                tracing::info!("Completed credential ID/machineId and written back to config file");
             }
         }
 
-        // 加载持久化的统计数据（success_count, last_used_at）
+        // Load persisted statistics data (success_count, last_used_at)
         manager.load_stats();
 
         Ok(manager)
     }
 
-    /// 获取配置的引用
+    /// Get a reference to the configuration
     pub fn config(&self) -> &Config {
         &self.config
     }
 
-    /// 获取凭据总数
+    /// Get the total number of credentials
     pub fn total_count(&self) -> usize {
         self.entries.lock().len()
     }
 
-    /// 获取可用凭据数量
+    /// Get the number of available credentials
     pub fn available_count(&self) -> usize {
         self.entries.lock().iter().filter(|e| !e.disabled).count()
     }
 
-    /// 根据负载均衡模式选择下一个凭据
+    /// Select the next credential based on the load balancing mode
     ///
-    /// - priority 模式：选择优先级最高（priority 最小）的可用凭据
-    /// - balanced 模式：均衡选择可用凭据
+    /// - priority mode: selects the available credential with the highest priority (lowest priority number)
+    /// - balanced mode: selects available credentials evenly
     ///
-    /// # 参数
-    /// - `model`: 可选的模型名称，用于过滤支持该模型的凭据（如 opus 模型需要付费订阅）
+    /// # Parameters
+    /// - `model`: optional model name for filtering credentials that support it (e.g. opus models require a paid subscription)
     fn select_next_credential(&self, model: Option<&str>) -> Option<(u64, KiroCredentials)> {
         let entries = self.entries.lock();
 
-        // 检查是否是 opus 模型
+        // Check whether this is an opus model
         let is_opus = model
             .map(|m| m.to_lowercase().contains("opus"))
             .unwrap_or(false);
 
-        // 过滤可用凭据
+        // Filter available credentials
         let available: Vec<_> = entries
             .iter()
             .filter(|e| {
                 if e.disabled {
                     return false;
                 }
-                // 如果是 opus 模型，需要检查订阅等级
+                // For opus models, check the subscription tier
                 if is_opus && !e.credentials.supports_opus() {
                     return false;
                 }
@@ -726,8 +726,8 @@ impl MultiTokenManager {
 
         match mode {
             "balanced" => {
-                // Least-Used 策略：选择成功次数最少的凭据
-                // 平局时按优先级排序（数字越小优先级越高）
+                // Least-Used strategy: select the credential with fewest successes
+                // Break ties by priority (lower number = higher priority)
                 let entry = available
                     .iter()
                     .min_by_key(|e| (e.success_count, e.credentials.priority))?;
@@ -735,23 +735,23 @@ impl MultiTokenManager {
                 Some((entry.id, entry.credentials.clone()))
             }
             _ => {
-                // priority 模式（默认）：选择优先级最高的
+                // priority mode (default): select the highest-priority credential
                 let entry = available.iter().min_by_key(|e| e.credentials.priority)?;
                 Some((entry.id, entry.credentials.clone()))
             }
         }
     }
 
-    /// 获取 API 调用上下文
+    /// Get the API call context
     ///
-    /// 返回绑定了 id、credentials 和 token 的调用上下文
-    /// 确保整个 API 调用过程中使用一致的凭据信息
+    /// Returns a call context bound with id, credentials, and token
+    /// Ensures consistent credential information throughout the API call
     ///
-    /// 如果 Token 过期或即将过期，会自动刷新
-    /// Token 刷新失败会累计到当前凭据，达到阈值后禁用并切换
+    /// Automatically refreshes the token if it is expired or expiring soon
+    /// Token refresh failures accumulate on the current credential; it is disabled and switched after reaching the threshold
     ///
-    /// # 参数
-    /// - `model`: 可选的模型名称，用于过滤支持该模型的凭据（如 opus 模型需要付费订阅）
+    /// # Parameters
+    /// - `model`: optional model name for filtering credentials that support it (e.g. opus models require a paid subscription)
     pub async fn acquire_context(&self, model: Option<&str>) -> anyhow::Result<CallContext> {
         let total = self.total_count();
         let max_attempts = (total * MAX_FAILURES_PER_CREDENTIAL as usize).max(1);
@@ -760,7 +760,7 @@ impl MultiTokenManager {
         loop {
             if attempt_count >= max_attempts {
                 anyhow::bail!(
-                    "所有凭据均无法获取有效 Token（可用: {}/{}）",
+                    "no valid token available from any credential (available: {}/{})",
                     self.available_count(),
                     total
                 );
@@ -769,8 +769,8 @@ impl MultiTokenManager {
             let (id, credentials) = {
                 let is_balanced = self.load_balancing_mode.lock().as_str() == "balanced";
 
-                // balanced 模式：每次请求都重新均衡选择，不固定 current_id
-                // priority 模式：优先使用 current_id 指向的凭据
+                // balanced mode: rebalance selection on every request, do not fix current_id
+                // priority mode: prefer the credential pointed to by current_id
                 let current_hit = if is_balanced {
                     None
                 } else {
@@ -785,10 +785,10 @@ impl MultiTokenManager {
                 if let Some(hit) = current_hit {
                     hit
                 } else {
-                    // 当前凭据不可用或 balanced 模式，根据负载均衡策略选择
+                    // Current credential unavailable or in balanced mode; select by load balancing strategy
                     let mut best = self.select_next_credential(model);
 
-                    // 没有可用凭据：如果是"自动禁用导致全灭"，做一次类似重启的自愈
+                    // No available credentials: if all were auto-disabled, perform a restart-like self-healing
                     if best.is_none() {
                         let mut entries = self.entries.lock();
                         if entries.iter().any(|e| {
@@ -810,53 +810,53 @@ impl MultiTokenManager {
                     }
 
                     if let Some((new_id, new_creds)) = best {
-                        // 更新 current_id
+                        // Update current_id
                         let mut current_id = self.current_id.lock();
                         *current_id = new_id;
                         (new_id, new_creds)
                     } else {
                         let entries = self.entries.lock();
-                        // 注意：必须在 bail! 之前计算 available_count，
-                        // 因为 available_count() 会尝试获取 entries 锁，
-                        // 而此时我们已经持有该锁，会导致死锁
+                        // Note: available_count must be computed before bail!,
+                        // because available_count() tries to acquire the entries lock,
+                        // and we already hold that lock, which would cause a deadlock
                         let available = entries.iter().filter(|e| !e.disabled).count();
-                        anyhow::bail!("所有凭据均已禁用（{}/{}）", available, total);
+                        anyhow::bail!("all credentials are disabled ({}/{})", available, total);
                     }
                 }
             };
 
-            // 尝试获取/刷新 Token
+            // Try to obtain/refresh token
             match self.try_ensure_token(id, &credentials).await {
                 Ok(ctx) => {
                     return Ok(ctx);
                 }
                 Err(e) => {
-                    // refreshToken 永久失效 → 立即禁用，不累计重试
+                    // refreshToken permanently invalid → disable immediately, do not accumulate retries
                     let has_available =
                         if e.downcast_ref::<RefreshTokenInvalidError>().is_some() {
-                            tracing::warn!("凭据 #{} refreshToken 永久失效: {}", id, e);
+                            tracing::warn!("Credential #{} refreshToken is permanently invalid: {}", id, e);
                             self.report_refresh_token_invalid(id)
                         } else {
-                            tracing::warn!("凭据 #{} Token 刷新失败: {}", id, e);
+                            tracing::warn!("Credential #{} token refresh failed: {}", id, e);
                             self.report_refresh_failure(id)
                         };
                     attempt_count += 1;
                     if !has_available {
-                        anyhow::bail!("所有凭据均已禁用（0/{}）", total);
+                        anyhow::bail!("all credentials are disabled (0/{})", total);
                     }
                 }
             }
         }
     }
 
-    /// 选择优先级最高的未禁用凭据作为当前凭据（内部方法）
+    /// Selects the highest-priority non-disabled credential as the current one (internal method)
     ///
-    /// 纯粹按优先级选择，不排除当前凭据，用于优先级变更后立即生效
+    /// Selects purely by priority without excluding the current credential; used to apply priority changes immediately
     fn select_highest_priority(&self) {
         let entries = self.entries.lock();
         let mut current_id = self.current_id.lock();
 
-        // 选择优先级最高的未禁用凭据（不排除当前凭据）
+        // Select highest-priority non-disabled credential (do not exclude the current credential)
         if let Some(best) = entries
             .iter()
             .filter(|e| !e.disabled)
@@ -864,7 +864,7 @@ impl MultiTokenManager {
         {
             if best.id != *current_id {
                 tracing::info!(
-                    "优先级变更后切换凭据: #{} -> #{}（优先级 {}）",
+                    "Credential switched after priority change: #{} -> #{} (priority {})",
                     *current_id,
                     best.id,
                     best.credentials.priority
@@ -874,24 +874,24 @@ impl MultiTokenManager {
         }
     }
 
-    /// 尝试使用指定凭据获取有效 Token
+    /// Attempt to obtain a valid token for the specified credential
     ///
-    /// 使用双重检查锁定模式，确保同一时间只有一个刷新操作
+    /// Uses the double-checked locking pattern to ensure only one refresh at a time
     ///
     /// # Arguments
-    /// * `id` - 凭据 ID，用于更新正确的条目
-    /// * `credentials` - 凭据信息
+    /// * `id` - Credential ID, used to update the correct entry
+    /// * `credentials` - Credential information
     async fn try_ensure_token(
         &self,
         id: u64,
         credentials: &KiroCredentials,
     ) -> anyhow::Result<CallContext> {
-        // API Key 凭据直接使用 kiro_api_key 作为 Bearer Token，无需刷新
+        // API Key credentials use kiro_api_key directly as the Bearer Token without refreshing
         if credentials.is_api_key_credential() {
             let token = credentials
                 .kiro_api_key
                 .clone()
-                .ok_or_else(|| anyhow::anyhow!("API Key 凭据缺少 kiroApiKey"))?;
+                .ok_or_else(|| anyhow::anyhow!("API Key credential is missing kiroApiKey"))?;
             return Ok(CallContext {
                 id,
                 credentials: credentials.clone(),
@@ -899,14 +899,14 @@ impl MultiTokenManager {
             });
         }
 
-        // 第一次检查（无锁）：快速判断是否需要刷新
+        // First check (lock-free): quick determination of whether a refresh is needed
         let needs_refresh = is_token_expired(credentials) || is_token_expiring_soon(credentials);
 
         let creds = if needs_refresh {
-            // 获取刷新锁，确保同一时间只有一个刷新操作
+            // Acquire the refresh lock to ensure only one refresh at a time
             let _guard = self.refresh_lock.lock().await;
 
-            // 第二次检查：获取锁后重新读取凭据，因为其他请求可能已经完成刷新
+            // Second check: re-read credentials after acquiring the lock, as another request may have already refreshed
             let current_creds = {
                 let entries = self.entries.lock();
                 entries
@@ -917,16 +917,16 @@ impl MultiTokenManager {
             };
 
             if is_token_expired(&current_creds) || is_token_expiring_soon(&current_creds) {
-                // 确实需要刷新
+                // Refresh is actually needed
                 let effective_proxy = current_creds.effective_proxy(self.proxy.as_ref());
                 let new_creds =
                     refresh_token(&current_creds, &self.config, effective_proxy.as_ref()).await?;
 
                 if is_token_expired(&new_creds) {
-                    anyhow::bail!("刷新后的 Token 仍然无效或已过期");
+                    anyhow::bail!("refreshed token is still invalid or expired");
                 }
 
-                // 更新凭据
+                // Update credentials
                 {
                     let mut entries = self.entries.lock();
                     if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
@@ -934,15 +934,15 @@ impl MultiTokenManager {
                     }
                 }
 
-                // 回写凭据到文件（仅多凭据格式），失败只记录警告
+                // Write credentials back to file (multi-credential format only); log a warning on failure
                 if let Err(e) = self.persist_credentials() {
-                    tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
+                    tracing::warn!("Failed to persist after token refresh (does not affect current request): {}", e);
                 }
 
                 new_creds
             } else {
-                // 其他请求已经完成刷新，直接使用新凭据
-                tracing::debug!("Token 已被其他请求刷新，跳过刷新");
+                // Another request has already completed the refresh; use the new credentials directly
+                tracing::debug!("Token already refreshed by another request, skipping refresh");
                 current_creds
             }
         } else {
@@ -952,7 +952,7 @@ impl MultiTokenManager {
         let token = creds
             .access_token
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))?;
+            .ok_or_else(|| anyhow::anyhow!("no available accessToken"))?;
 
         {
             let mut entries = self.entries.lock();
@@ -968,20 +968,20 @@ impl MultiTokenManager {
         })
     }
 
-    /// 将凭据列表回写到源文件
+    /// Write the credential list back to the source file
     ///
-    /// 仅在以下条件满足时回写：
-    /// - 源文件是多凭据格式（数组）
-    /// - credentials_path 已设置
+    /// Writeback only occurs when all of the following conditions are met:
+    /// - The source file uses multi-credential format (array)
+    /// - credentials_path is set
     ///
     /// # Returns
-    /// - `Ok(true)` - 成功写入文件
-    /// - `Ok(false)` - 跳过写入（非多凭据格式或无路径配置）
-    /// - `Err(_)` - 写入失败
+    /// - `Ok(true)` - Successfully written to file
+    /// - `Ok(false)` - Skipped writing (not multi-credential format or no path configured)
+    /// - `Err(_)` - Write failed
     fn persist_credentials(&self) -> anyhow::Result<bool> {
         use anyhow::Context;
 
-        // 仅多凭据格式才回写
+        // Writeback only for multi-credential format
         if !self.is_multiple_format {
             return Ok(false);
         }
@@ -991,7 +991,7 @@ impl MultiTokenManager {
             None => return Ok(false),
         };
 
-        // 收集所有凭据
+        // Collect all credentials
         let credentials: Vec<KiroCredentials> = {
             let entries = self.entries.lock();
             entries
@@ -999,41 +999,41 @@ impl MultiTokenManager {
                 .map(|e| {
                     let mut cred = e.credentials.clone();
                     cred.canonicalize_auth_method();
-                    // 同步 disabled 状态到凭据对象
+                    // Sync the disabled state to the credential object
                     cred.disabled = e.disabled;
                     cred
                 })
                 .collect()
         };
 
-        // 序列化为 pretty JSON
-        let json = serde_json::to_string_pretty(&credentials).context("序列化凭据失败")?;
+        // Serialize to pretty JSON
+        let json = serde_json::to_string_pretty(&credentials).context("failed to serialize credentials")?;
 
-        // 写入文件（在 Tokio runtime 内使用 block_in_place 避免阻塞 worker）
+        // Write to file (use block_in_place within Tokio runtime to avoid blocking the worker thread)
         if tokio::runtime::Handle::try_current().is_ok() {
             tokio::task::block_in_place(|| std::fs::write(path, &json))
-                .with_context(|| format!("回写凭据文件失败: {:?}", path))?;
+                .with_context(|| format!("Failed to write back credentials file: {:?}", path))?;
         } else {
-            std::fs::write(path, &json).with_context(|| format!("回写凭据文件失败: {:?}", path))?;
+            std::fs::write(path, &json).with_context(|| format!("Failed to write back credentials file: {:?}", path))?;
         }
 
-        tracing::debug!("已回写凭据到文件: {:?}", path);
+        tracing::debug!("Credentials written back to file: {:?}", path);
         Ok(true)
     }
 
-    /// 获取缓存目录（凭据文件所在目录）
+    /// Get the cache directory (the directory containing the credentials file)
     pub fn cache_dir(&self) -> Option<PathBuf> {
         self.credentials_path
             .as_ref()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
     }
 
-    /// 统计数据文件路径
+    /// Statistics data file path
     fn stats_path(&self) -> Option<PathBuf> {
         self.cache_dir().map(|d| d.join("kiro_stats.json"))
     }
 
-    /// 从磁盘加载统计数据并应用到当前条目
+    /// Load statistics data from disk and apply it to the current entries
     fn load_stats(&self) {
         let path = match self.stats_path() {
             Some(p) => p,
@@ -1042,13 +1042,13 @@ impl MultiTokenManager {
 
         let content = match std::fs::read_to_string(&path) {
             Ok(c) => c,
-            Err(_) => return, // 首次运行时文件不存在
+            Err(_) => return, // File does not exist on first run
         };
 
         let stats: HashMap<String, StatsEntry> = match serde_json::from_str(&content) {
             Ok(s) => s,
             Err(e) => {
-                tracing::warn!("解析统计缓存失败，将忽略: {}", e);
+                tracing::warn!("Failed to parse statistics cache, will be ignored: {}", e);
                 return;
             }
         };
@@ -1062,10 +1062,10 @@ impl MultiTokenManager {
         }
         *self.last_stats_save_at.lock() = Some(Instant::now());
         self.stats_dirty.store(false, Ordering::Relaxed);
-        tracing::info!("已从缓存加载 {} 条统计数据", stats.len());
+        tracing::info!("Loaded {} statistics entries from cache", stats.len());
     }
 
-    /// 将当前统计数据持久化到磁盘
+    /// Persist the current statistics data to disk
     fn save_stats(&self) {
         let path = match self.stats_path() {
             Some(p) => p,
@@ -1091,17 +1091,17 @@ impl MultiTokenManager {
         match serde_json::to_string_pretty(&stats) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(&path, json) {
-                    tracing::warn!("保存统计缓存失败: {}", e);
+                    tracing::warn!("Failed to save statistics cache: {}", e);
                 } else {
                     *self.last_stats_save_at.lock() = Some(Instant::now());
                     self.stats_dirty.store(false, Ordering::Relaxed);
                 }
             }
-            Err(e) => tracing::warn!("序列化统计数据失败: {}", e),
+            Err(e) => tracing::warn!("Failed to serialize statistics data: {}", e),
         }
     }
 
-    /// 标记统计数据已更新，并按 debounce 策略决定是否立即落盘
+    /// Mark statistics as updated and decide whether to flush to disk immediately based on debounce policy
     fn save_stats_debounced(&self) {
         self.stats_dirty.store(true, Ordering::Relaxed);
 
@@ -1118,12 +1118,12 @@ impl MultiTokenManager {
         }
     }
 
-    /// 报告指定凭据 API 调用成功
+    /// Report a successful API call for the specified credential
     ///
-    /// 重置该凭据的失败计数
+    /// Resets the failure count for this credential
     ///
     /// # Arguments
-    /// * `id` - 凭据 ID（来自 CallContext）
+    /// * `id` - Credential ID (from CallContext)
     pub fn report_success(&self, id: u64) {
         {
             let mut entries = self.entries.lock();
@@ -1133,7 +1133,7 @@ impl MultiTokenManager {
                 entry.success_count += 1;
                 entry.last_used_at = Some(Utc::now().to_rfc3339());
                 tracing::debug!(
-                    "凭据 #{} API 调用成功（累计 {} 次）",
+                    "Credential #{} API call succeeded (total: {} times)",
                     id,
                     entry.success_count
                 );
@@ -1142,13 +1142,13 @@ impl MultiTokenManager {
         self.save_stats_debounced();
     }
 
-    /// 报告指定凭据 API 调用失败
+    /// Report a failed API call for the specified credential
     ///
-    /// 增加失败计数，达到阈值时禁用凭据并切换到优先级最高的可用凭据
-    /// 返回是否还有可用凭据可以重试
+    /// Increments the failure count; disables the credential and switches to the highest-priority available one when the threshold is reached
+    /// Returns whether there are still available credentials to retry with
     ///
     /// # Arguments
-    /// * `id` - 凭据 ID（来自 CallContext）
+    /// * `id` - Credential ID (from CallContext)
     pub fn report_failure(&self, id: u64) -> bool {
         let result = {
             let mut entries = self.entries.lock();
@@ -1168,7 +1168,7 @@ impl MultiTokenManager {
             let failure_count = entry.failure_count;
 
             tracing::warn!(
-                "凭据 #{} API 调用失败（{}/{}）",
+                "Credential #{} API call failed ({}/{})",
                 id,
                 failure_count,
                 MAX_FAILURES_PER_CREDENTIAL
@@ -1177,9 +1177,9 @@ impl MultiTokenManager {
             if failure_count >= MAX_FAILURES_PER_CREDENTIAL {
                 entry.disabled = true;
                 entry.disabled_reason = Some(DisabledReason::TooManyFailures);
-                tracing::error!("凭据 #{} 已连续失败 {} 次，已被禁用", id, failure_count);
+                tracing::error!("Credential #{} has failed {} consecutive times and has been disabled", id, failure_count);
 
-                // 切换到优先级最高的可用凭据
+                // Switch to the highest-priority available credential
                 if let Some(next) = entries
                     .iter()
                     .filter(|e| !e.disabled)
@@ -1187,12 +1187,12 @@ impl MultiTokenManager {
                 {
                     *current_id = next.id;
                     tracing::info!(
-                        "已切换到凭据 #{}（优先级 {}）",
+                        "Switched to credential #{} (priority {})",
                         next.id,
                         next.credentials.priority
                     );
                 } else {
-                    tracing::error!("所有凭据均已禁用！");
+                    tracing::error!("All credentials are disabled!");
                 }
             }
 
@@ -1202,12 +1202,12 @@ impl MultiTokenManager {
         result
     }
 
-    /// 报告指定凭据额度已用尽
+    /// Report that the quota for the specified credential is exhausted
     ///
-    /// 用于处理 402 Payment Required 且 reason 为 `MONTHLY_REQUEST_COUNT` 的场景：
-    /// - 立即禁用该凭据（不等待连续失败阈值）
-    /// - 切换到下一个可用凭据继续重试
-    /// - 返回是否还有可用凭据
+    /// Used when a 402 Payment Required response with reason `MONTHLY_REQUEST_COUNT` is received:
+    /// - Immediately disables the credential (without waiting for the consecutive failure threshold)
+    /// - Switches to the next available credential to continue retrying
+    /// - Returns whether there are still available credentials
     pub fn report_quota_exhausted(&self, id: u64) -> bool {
         let result = {
             let mut entries = self.entries.lock();
@@ -1225,12 +1225,12 @@ impl MultiTokenManager {
             entry.disabled = true;
             entry.disabled_reason = Some(DisabledReason::QuotaExceeded);
             entry.last_used_at = Some(Utc::now().to_rfc3339());
-            // 设为阈值，便于在管理面板中直观看到该凭据已不可用
+            // Set to threshold so the admin panel clearly shows this credential is unavailable
             entry.failure_count = MAX_FAILURES_PER_CREDENTIAL;
 
-            tracing::error!("凭据 #{} 额度已用尽（MONTHLY_REQUEST_COUNT），已被禁用", id);
+            tracing::error!("Credential #{} quota exhausted (MONTHLY_REQUEST_COUNT); has been disabled", id);
 
-            // 切换到优先级最高的可用凭据
+            // Switch to the highest-priority available credential
             if let Some(next) = entries
                 .iter()
                 .filter(|e| !e.disabled)
@@ -1238,13 +1238,13 @@ impl MultiTokenManager {
             {
                 *current_id = next.id;
                 tracing::info!(
-                    "已切换到凭据 #{}（优先级 {}）",
+                    "Switched to credential #{} (priority {})",
                     next.id,
                     next.credentials.priority
                 );
                 true
             } else {
-                tracing::error!("所有凭据均已禁用！");
+                tracing::error!("All credentials are disabled!");
                 false
             }
         };
@@ -1252,10 +1252,10 @@ impl MultiTokenManager {
         result
     }
 
-    /// 报告指定凭据刷新 Token 失败。
+    /// Report a token refresh failure for the specified credential.
     ///
-    /// 连续刷新失败达到阈值后禁用凭据并切换，阈值内保持当前凭据不切换，
-    /// 与 API 401/403 的累计失败策略保持一致。
+    /// After consecutive refresh failures reach the threshold, disables and switches credentials; within the threshold, keeps the current credential,
+    /// consistent with the cumulative failure strategy for API 401/403.
     pub fn report_refresh_failure(&self, id: u64) -> bool {
         let result = {
             let mut entries = self.entries.lock();
@@ -1275,7 +1275,7 @@ impl MultiTokenManager {
             let refresh_failure_count = entry.refresh_failure_count;
 
             tracing::warn!(
-                "凭据 #{} Token 刷新失败（{}/{}）",
+                "Credential #{} token refresh failed ({}/{})",
                 id,
                 refresh_failure_count,
                 MAX_FAILURES_PER_CREDENTIAL
@@ -1289,7 +1289,7 @@ impl MultiTokenManager {
             entry.disabled_reason = Some(DisabledReason::TooManyRefreshFailures);
 
             tracing::error!(
-                "凭据 #{} Token 已连续刷新失败 {} 次，已被禁用",
+                "Credential #{} token refresh has failed {} consecutive times and has been disabled",
                 id,
                 refresh_failure_count
             );
@@ -1301,13 +1301,13 @@ impl MultiTokenManager {
             {
                 *current_id = next.id;
                 tracing::info!(
-                    "已切换到凭据 #{}（优先级 {}）",
+                    "Switched to credential #{} (priority {})",
                     next.id,
                     next.credentials.priority
                 );
                 true
             } else {
-                tracing::error!("所有凭据均已禁用！");
+                tracing::error!("All credentials are disabled!");
                 false
             }
         };
@@ -1315,10 +1315,10 @@ impl MultiTokenManager {
         result
     }
 
-    /// 报告指定凭据的 refreshToken 永久失效（invalid_grant）。
+    /// Report that the refreshToken for the specified credential is permanently invalid (invalid_grant).
     ///
-    /// 立即禁用凭据，不累计、不重试。
-    /// 返回是否还有可用凭据。
+    /// Immediately disables the credential without accumulating failures or retrying.
+    /// Returns whether there are still available credentials.
     pub fn report_refresh_token_invalid(&self, id: u64) -> bool {
         let result = {
             let mut entries = self.entries.lock();
@@ -1338,7 +1338,7 @@ impl MultiTokenManager {
             entry.disabled_reason = Some(DisabledReason::InvalidRefreshToken);
 
             tracing::error!(
-                "凭据 #{} refreshToken 已失效 (invalid_grant)，已立即禁用",
+                "Credential #{} refreshToken is permanently invalid (invalid_grant); immediately disabled",
                 id
             );
 
@@ -1349,13 +1349,13 @@ impl MultiTokenManager {
             {
                 *current_id = next.id;
                 tracing::info!(
-                    "已切换到凭据 #{}（优先级 {}）",
+                    "Switched to credential #{} (priority {})",
                     next.id,
                     next.credentials.priority
                 );
                 true
             } else {
-                tracing::error!("所有凭据均已禁用！");
+                tracing::error!("All credentials are disabled!");
                 false
             }
         };
@@ -1363,9 +1363,9 @@ impl MultiTokenManager {
         result
     }
 
-    /// 切换到优先级最高的可用凭据
+    /// Switch to the highest-priority available credential
     ///
-    /// 返回是否成功切换
+    /// Returns whether the switch was successful
     pub fn switch_to_next(&self) -> bool {
         let entries = self.entries.lock();
         let mut current_id = self.current_id.lock();
@@ -1378,7 +1378,7 @@ impl MultiTokenManager {
         {
             *current_id = next.id;
             tracing::info!(
-                "已切换到凭据 #{}（优先级 {}）",
+                "Switched to credential #{} (priority {})",
                 next.id,
                 next.credentials.priority
             );
@@ -1390,10 +1390,10 @@ impl MultiTokenManager {
     }
 
     // ========================================================================
-    // Admin API 方法
+    // Admin API methods
     // ========================================================================
 
-    /// 获取管理器状态快照（用于 Admin API）
+    /// Get a state snapshot of the manager (for Admin API)
     pub fn snapshot(&self) -> ManagerSnapshot {
         let entries = self.entries.lock();
         let current_id = *self.current_id.lock();
@@ -1462,14 +1462,14 @@ impl MultiTokenManager {
         }
     }
 
-    /// 设置凭据禁用状态（Admin API）
+    /// Set the credential disabled state (Admin API)
     pub fn set_disabled(&self, id: u64, disabled: bool) -> anyhow::Result<()> {
         {
             let mut entries = self.entries.lock();
             let entry = entries
                 .iter_mut()
                 .find(|e| e.id == id)
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?;
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?;
             entry.disabled = disabled;
             if !disabled {
                 // 启用时重置失败计数
@@ -1480,42 +1480,42 @@ impl MultiTokenManager {
                 entry.disabled_reason = Some(DisabledReason::Manual);
             }
         }
-        // 持久化更改
+        // Persist changes
         self.persist_credentials()?;
         Ok(())
     }
 
-    /// 设置凭据优先级（Admin API）
+    /// Set credential priority (Admin API)
     ///
-    /// 修改优先级后会立即按新优先级重新选择当前凭据。
-    /// 即使持久化失败，内存中的优先级和当前凭据选择也会生效。
+    /// After changing priority, the current credential is immediately reselected based on the new priority.
+    /// Even if persistence fails, the in-memory priority and current credential selection take effect.
     pub fn set_priority(&self, id: u64, priority: u32) -> anyhow::Result<()> {
         {
             let mut entries = self.entries.lock();
             let entry = entries
                 .iter_mut()
                 .find(|e| e.id == id)
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?;
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?;
             entry.credentials.priority = priority;
         }
         // 立即按新优先级重新选择当前凭据（无论持久化是否成功）
         self.select_highest_priority();
-        // 持久化更改
+        // Persist changes
         self.persist_credentials()?;
         Ok(())
     }
 
-    /// 重置凭据失败计数并重新启用（Admin API）
+    /// Reset the credential failure count and re-enable it (Admin API)
     pub fn reset_and_enable(&self, id: u64) -> anyhow::Result<()> {
         {
             let mut entries = self.entries.lock();
             let entry = entries
                 .iter_mut()
                 .find(|e| e.id == id)
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?;
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?;
             if entry.disabled_reason == Some(DisabledReason::InvalidConfig) {
                 anyhow::bail!(
-                    "凭据 #{} 因配置无效被禁用，请修正配置后重启服务",
+                    "credential #{} was disabled due to invalid configuration; please fix the configuration and restart the service",
                     id
                 );
             }
@@ -1524,12 +1524,12 @@ impl MultiTokenManager {
             entry.disabled = false;
             entry.disabled_reason = None;
         }
-        // 持久化更改
+        // Persist changes
         self.persist_credentials()?;
         Ok(())
     }
 
-    /// 获取指定凭据的使用额度（Admin API）
+    /// Get the usage limit for the specified credential (Admin API)
     pub async fn get_usage_limits_for(&self, id: u64) -> anyhow::Result<UsageLimitsResponse> {
         let credentials = {
             let entries = self.entries.lock();
@@ -1537,7 +1537,7 @@ impl MultiTokenManager {
                 .iter()
                 .find(|e| e.id == id)
                 .map(|e| e.credentials.clone())
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?
         };
 
         // API Key 凭据直接使用 kiro_api_key，无需刷新
@@ -1545,7 +1545,7 @@ impl MultiTokenManager {
             credentials
                 .kiro_api_key
                 .clone()
-                .ok_or_else(|| anyhow::anyhow!("API Key 凭据缺少 kiroApiKey"))?
+                .ok_or_else(|| anyhow::anyhow!("API Key credential is missing kiroApiKey"))?
         } else {
             // 检查是否需要刷新 token
             let needs_refresh =
@@ -1559,7 +1559,7 @@ impl MultiTokenManager {
                         .iter()
                         .find(|e| e.id == id)
                         .map(|e| e.credentials.clone())
-                        .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?
+                        .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?
                 };
 
                 if is_token_expired(&current_creds) || is_token_expiring_soon(&current_creds) {
@@ -1573,22 +1573,22 @@ impl MultiTokenManager {
                             entry.credentials = new_creds.clone();
                         }
                     }
-                    // 持久化失败只记录警告，不影响本次请求
+                    // Persist失败只记录警告，不影响本次请求
                     if let Err(e) = self.persist_credentials() {
-                        tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
+                        tracing::warn!("Failed to persist after token refresh (does not affect current request): {}", e);
                     }
                     new_creds
                         .access_token
-                        .ok_or_else(|| anyhow::anyhow!("刷新后无 access_token"))?
+                        .ok_or_else(|| anyhow::anyhow!("no access_token after refresh"))?
                 } else {
                     current_creds
                         .access_token
-                        .ok_or_else(|| anyhow::anyhow!("凭据无 access_token"))?
+                        .ok_or_else(|| anyhow::anyhow!("credential has no access_token"))?
                 }
             } else {
                 credentials
                     .access_token
-                    .ok_or_else(|| anyhow::anyhow!("凭据无 access_token"))?
+                    .ok_or_else(|| anyhow::anyhow!("credential has no access_token"))?
             }
         };
 
@@ -1598,7 +1598,7 @@ impl MultiTokenManager {
                 .iter()
                 .find(|e| e.id == id)
                 .map(|e| e.credentials.clone())
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?
         };
 
         let effective_proxy = credentials.effective_proxy(self.proxy.as_ref());
@@ -1630,7 +1630,7 @@ impl MultiTokenManager {
 
             if changed {
                 if let Err(e) = self.persist_credentials() {
-                    tracing::warn!("订阅等级更新后持久化失败（不影响本次请求）: {}", e);
+                    tracing::warn!("Failed to persist after updating subscription tier (does not affect current request): {}", e);
                 }
             }
         }
@@ -1638,28 +1638,28 @@ impl MultiTokenManager {
         Ok(usage_limits)
     }
 
-    /// 添加新凭据（Admin API）
+    /// Add a new credential (Admin API)
     ///
-    /// # 流程
-    /// 1. 验证凭据基本字段（API Key: kiroApiKey 不为空; OAuth: refreshToken 不为空）
-    /// 2. 基于 kiroApiKey 或 refreshToken 的 SHA-256 哈希检测重复
-    /// 3. OAuth: 尝试刷新 Token 验证凭据有效性; API Key: 跳过
-    /// 4. 分配新 ID（当前最大 ID + 1）
-    /// 5. 添加到 entries 列表
-    /// 6. 持久化到配置文件
+    /// # Flow
+    /// 1. Validate basic credential fields (API Key: kiroApiKey must not be empty; OAuth: refreshToken must not be empty)
+    /// 2. Detect duplicates based on SHA-256 hash of kiroApiKey or refreshToken
+    /// 3. OAuth: attempt token refresh to validate credential; API Key: skip
+    /// 4. Assign a new ID (current max ID + 1)
+    /// 5. Add to the entries list
+    /// 6. Persist to the configuration file
     ///
-    /// # 返回
-    /// - `Ok(u64)` - 新凭据 ID
-    /// - `Err(_)` - 验证失败或添加失败
+    /// # Returns
+    /// - `Ok(u64)` - New credential ID
+    /// - `Err(_)` - Validation or addition failed
     pub async fn add_credential(&self, new_cred: KiroCredentials) -> anyhow::Result<u64> {
         // 1. 基本验证
         if new_cred.is_api_key_credential() {
             let api_key = new_cred
                 .kiro_api_key
                 .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("API Key 凭据缺少 kiroApiKey"))?;
+                .ok_or_else(|| anyhow::anyhow!("API Key credential is missing kiroApiKey"))?;
             if api_key.is_empty() {
-                anyhow::bail!("kiroApiKey 为空");
+                anyhow::bail!("kiroApiKey is empty");
             }
         } else {
             validate_refresh_token(&new_cred)?;
@@ -1670,7 +1670,7 @@ impl MultiTokenManager {
             let new_api_key = new_cred
                 .kiro_api_key
                 .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("缺少 kiroApiKey"))?;
+                .ok_or_else(|| anyhow::anyhow!("missing kiroApiKey"))?;
             let new_api_key_hash = sha256_hex(new_api_key);
             let duplicate_exists = {
                 let entries = self.entries.lock();
@@ -1685,13 +1685,13 @@ impl MultiTokenManager {
                 })
             };
             if duplicate_exists {
-                anyhow::bail!("凭据已存在（kiroApiKey 重复）");
+                anyhow::bail!("credential already exists (duplicate kiroApiKey)");
             }
         } else {
             let new_refresh_token = new_cred
                 .refresh_token
                 .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("缺少 refreshToken"))?;
+                .ok_or_else(|| anyhow::anyhow!("missing refreshToken"))?;
             let new_refresh_token_hash = sha256_hex(new_refresh_token);
             let duplicate_exists = {
                 let entries = self.entries.lock();
@@ -1706,7 +1706,7 @@ impl MultiTokenManager {
                 })
             };
             if duplicate_exists {
-                anyhow::bail!("凭据已存在（refreshToken 重复）");
+                anyhow::bail!("credential already exists (duplicate refreshToken)");
             }
         }
 
@@ -1763,26 +1763,26 @@ impl MultiTokenManager {
         // 6. 持久化
         self.persist_credentials()?;
 
-        tracing::info!("成功添加凭据 #{}", new_id);
+        tracing::info!("Successfully added credential #{}", new_id);
         Ok(new_id)
     }
 
-    /// 删除凭据（Admin API）
+    /// Delete a credential (Admin API)
     ///
-    /// # 前置条件
-    /// - 凭据必须已禁用（disabled = true）
+    /// # Preconditions
+    /// - The credential must already be disabled (disabled = true)
     ///
-    /// # 行为
-    /// 1. 验证凭据存在
-    /// 2. 验证凭据已禁用
-    /// 3. 从 entries 移除
-    /// 4. 如果删除的是当前凭据，切换到优先级最高的可用凭据
-    /// 5. 如果删除后没有凭据，将 current_id 重置为 0
-    /// 6. 持久化到文件
+    /// # Behavior
+    /// 1. Verify the credential exists
+    /// 2. Verify the credential is disabled
+    /// 3. Remove from entries
+    /// 4. If the deleted credential was the current one, switch to the highest-priority available credential
+    /// 5. If no credentials remain, reset current_id to 0
+    /// 6. Persist to file
     ///
-    /// # 返回
-    /// - `Ok(())` - 删除成功
-    /// - `Err(_)` - 凭据不存在、未禁用或持久化失败
+    /// # Returns
+    /// - `Ok(())` - Deletion successful
+    /// - `Err(_)` - Credential not found, not disabled, or persistence failed
     pub fn delete_credential(&self, id: u64) -> anyhow::Result<()> {
         let was_current = {
             let mut entries = self.entries.lock();
@@ -1791,11 +1791,11 @@ impl MultiTokenManager {
             let entry = entries
                 .iter()
                 .find(|e| e.id == id)
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?;
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?;
 
             // 检查是否已禁用
             if !entry.disabled {
-                anyhow::bail!("只能删除已禁用的凭据（请先禁用凭据 #{}）", id);
+                anyhow::bail!("only disabled credentials can be deleted (please disable credential #{} first)", id);
             }
 
             // 记录是否是当前凭据
@@ -1808,35 +1808,35 @@ impl MultiTokenManager {
             was_current
         };
 
-        // 如果删除的是当前凭据，切换到优先级最高的可用凭据
+        // If the deleted credential was the current one, switch to the highest-priority available credential
         if was_current {
             self.select_highest_priority();
         }
 
-        // 如果删除后没有任何凭据，将 current_id 重置为 0（与初始化行为保持一致）
+        // If no credentials remain after deletion, reset current_id to 0 (consistent with initialization behavior)
         {
             let entries = self.entries.lock();
             if entries.is_empty() {
                 let mut current_id = self.current_id.lock();
                 *current_id = 0;
-                tracing::info!("所有凭据已删除，current_id 已重置为 0");
+                tracing::info!("All credentials deleted; current_id reset to 0");
             }
         }
 
-        // 持久化更改
+        // Persist changes
         self.persist_credentials()?;
 
-        // 立即回写统计数据，清除已删除凭据的残留条目
+        // Immediately write back statistics data to clear residual entries for deleted credentials
         self.save_stats();
 
-        tracing::info!("已删除凭据 #{}", id);
+        tracing::info!("Deleted credential #{}", id);
         Ok(())
     }
 
-    /// 强制刷新指定凭据的 Token（Admin API）
+    /// Force-refresh the token for the specified credential (Admin API)
     ///
-    /// 无条件调用上游 API 重新获取 access token，不检查是否过期。
-    /// 适用于排查问题、Token 异常但未过期、主动更新凭据状态等场景。
+    /// Unconditionally calls the upstream API to re-fetch the access token, without checking expiry.
+    /// Useful for troubleshooting, handling anomalous tokens that haven't expired, or proactively updating credential state.
     pub async fn force_refresh_token_for(&self, id: u64) -> anyhow::Result<()> {
         let credentials = {
             let entries = self.entries.lock();
@@ -1844,18 +1844,18 @@ impl MultiTokenManager {
                 .iter()
                 .find(|e| e.id == id)
                 .map(|e| e.credentials.clone())
-                .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?
+                .ok_or_else(|| anyhow::anyhow!("credential not found: {}", id))?
         };
 
-        // 获取刷新锁防止并发刷新
+        // Acquire the refresh lock to prevent concurrent refreshes
         let _guard = self.refresh_lock.lock().await;
 
-        // 无条件调用 refresh_token
+        // Unconditionally call refresh_token
         let effective_proxy = credentials.effective_proxy(self.proxy.as_ref());
         let new_creds =
             refresh_token(&credentials, &self.config, effective_proxy.as_ref()).await?;
 
-        // 更新 entries 中对应凭据
+        // Update the corresponding credential in entries
         {
             let mut entries = self.entries.lock();
             if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
@@ -1864,16 +1864,16 @@ impl MultiTokenManager {
             }
         }
 
-        // 持久化
+        // Persist
         if let Err(e) = self.persist_credentials() {
-            tracing::warn!("强制刷新 Token 后持久化失败: {}", e);
+            tracing::warn!("Failed to persist after force-refreshing token: {}", e);
         }
 
-        tracing::info!("凭据 #{} Token 已强制刷新", id);
+        tracing::info!("Credential #{} token has been force-refreshed", id);
         Ok(())
     }
 
-    /// 获取负载均衡模式（Admin API）
+    /// Get the load balancing mode (Admin API)
     pub fn get_load_balancing_mode(&self) -> String {
         self.load_balancing_mode.lock().clone()
     }
@@ -1884,26 +1884,26 @@ impl MultiTokenManager {
         let config_path = match self.config.config_path() {
             Some(path) => path.to_path_buf(),
             None => {
-                tracing::warn!("配置文件路径未知，负载均衡模式仅在当前进程生效: {}", mode);
+                tracing::warn!("Config file path unknown; load balancing mode only applies to current process: {}", mode);
                 return Ok(());
             }
         };
 
         let mut config = Config::load(&config_path)
-            .with_context(|| format!("重新加载配置失败: {}", config_path.display()))?;
+            .with_context(|| format!("failed to reload configuration: {}", config_path.display()))?;
         config.load_balancing_mode = mode.to_string();
         config
             .save()
-            .with_context(|| format!("持久化负载均衡模式失败: {}", config_path.display()))?;
+            .with_context(|| format!("failed to persist load balancing mode: {}", config_path.display()))?;
 
         Ok(())
     }
 
-    /// 设置负载均衡模式（Admin API）
+    /// Set the load balancing mode (Admin API)
     pub fn set_load_balancing_mode(&self, mode: String) -> anyhow::Result<()> {
-        // 验证模式值
+        // Validate the mode value
         if mode != "priority" && mode != "balanced" {
-            anyhow::bail!("无效的负载均衡模式: {}", mode);
+            anyhow::bail!("invalid load balancing mode: {}", mode);
         }
 
         let previous_mode = self.get_load_balancing_mode();
@@ -1918,7 +1918,7 @@ impl MultiTokenManager {
             return Err(err);
         }
 
-        tracing::info!("负载均衡模式已设置为: {}", mode);
+        tracing::info!("Load balancing mode set to: {}", mode);
         Ok(())
     }
 }
@@ -2013,11 +2013,11 @@ mod tests {
 
         let result = refresh_token(&credentials, &config, None).await;
 
-        assert!(result.is_err(), "API Key 凭据应被 refresh_token 拒绝");
+        assert!(result.is_err(), "API Key credential should be rejected by refresh_token");
         let err_msg = result.unwrap_err().to_string();
         assert!(
-            err_msg.contains("API Key 凭据不支持刷新"),
-            "期望错误消息包含 'API Key 凭据不支持刷新'，实际: {}",
+            err_msg.contains("API Key credentials do not support token refresh"),
+            "expected error message to contain 'API Key credentials do not support token refresh', got: {}",
             err_msg
         );
     }
@@ -2036,7 +2036,7 @@ mod tests {
 
         let result = manager.add_credential(duplicate).await;
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("凭据已存在"));
+        assert!(result.err().unwrap().to_string().contains("credential already exists"));
     }
 
     #[tokio::test]
@@ -2076,7 +2076,7 @@ mod tests {
             .err()
             .unwrap()
             .to_string()
-            .contains("kiroApiKey 重复"));
+            .contains("duplicate kiroApiKey"));
     }
 
     #[tokio::test]
@@ -2094,7 +2094,7 @@ mod tests {
             .err()
             .unwrap()
             .to_string()
-            .contains("kiroApiKey 为空"));
+            .contains("kiroApiKey is empty"));
     }
 
     #[tokio::test]
@@ -2112,7 +2112,7 @@ mod tests {
             .err()
             .unwrap()
             .to_string()
-            .contains("缺少 kiroApiKey"));
+            .contains("missing kiroApiKey"));
     }
 
     #[tokio::test]
@@ -2134,7 +2134,7 @@ mod tests {
         assert_eq!(manager.available_count(), 2);
     }
 
-    // MultiTokenManager 测试
+    // MultiTokenManager tests
 
     #[test]
     fn test_multi_token_manager_new() {
@@ -2154,7 +2154,7 @@ mod tests {
     fn test_multi_token_manager_empty_credentials() {
         let config = Config::default();
         let result = MultiTokenManager::new(config, vec![], None, None, false);
-        // 支持 0 个凭据启动（可通过管理面板添加）
+        // Supports starting with 0 credentials (can be added via the admin panel)
         assert!(result.is_ok());
         let manager = result.unwrap();
         assert_eq!(manager.total_count(), 0);
@@ -2173,8 +2173,8 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.err().unwrap().to_string();
         assert!(
-            err_msg.contains("重复的凭据 ID"),
-            "错误消息应包含 '重复的凭据 ID'，实际: {}",
+            err_msg.contains("duplicate credential IDs"),
+            "error message should contain 'duplicate credential IDs', got: {}",
             err_msg
         );
     }
@@ -2183,10 +2183,10 @@ mod tests {
     fn test_multi_token_manager_api_key_missing_kiro_api_key_auto_disabled() {
         let config = Config::default();
 
-        // auth_method=api_key 但缺少 kiro_api_key → 应被自动禁用
+        // auth_method=api_key but kiro_api_key is missing → should be automatically disabled
         let mut bad_cred = KiroCredentials::default();
         bad_cred.auth_method = Some("api_key".to_string());
-        // kiro_api_key 保持 None
+        // kiro_api_key remains None
 
         let mut good_cred = KiroCredentials::default();
         good_cred.refresh_token = Some("valid_token".to_string());
@@ -2194,14 +2194,14 @@ mod tests {
         let manager =
             MultiTokenManager::new(config, vec![bad_cred, good_cred], None, None, false).unwrap();
         assert_eq!(manager.total_count(), 2);
-        assert_eq!(manager.available_count(), 1); // bad_cred 被禁用，只剩 1 个可用
+        assert_eq!(manager.available_count(), 1); // bad_cred disabled, only 1 remaining
     }
 
     #[test]
     fn test_multi_token_manager_api_key_with_kiro_api_key_not_disabled() {
         let config = Config::default();
 
-        // auth_method=api_key 且有 kiro_api_key → 不应被禁用
+        // auth_method=api_key with kiro_api_key present → should not be disabled
         let mut cred = KiroCredentials::default();
         cred.auth_method = Some("api_key".to_string());
         cred.kiro_api_key = Some("ksk_test123".to_string());
@@ -2220,20 +2220,20 @@ mod tests {
         let manager =
             MultiTokenManager::new(config, vec![cred1, cred2], None, None, false).unwrap();
 
-        // 凭据会自动分配 ID（从 1 开始）
-        // 前两次失败不会禁用（使用 ID 1）
+        // Credentials are auto-assigned IDs (starting from 1)
+        // First two failures do not disable (using ID 1)
         assert!(manager.report_failure(1));
         assert!(manager.report_failure(1));
         assert_eq!(manager.available_count(), 2);
 
-        // 第三次失败会禁用第一个凭据
+        // Third failure disables the first credential
         assert!(manager.report_failure(1));
         assert_eq!(manager.available_count(), 1);
 
-        // 继续失败第二个凭据（使用 ID 2）
+        // Continue failing the second credential (using ID 2)
         assert!(manager.report_failure(2));
         assert!(manager.report_failure(2));
-        assert!(!manager.report_failure(2)); // 所有凭据都禁用了
+        assert!(!manager.report_failure(2)); // all credentials disabled
         assert_eq!(manager.available_count(), 0);
     }
 
@@ -2244,14 +2244,14 @@ mod tests {
 
         let manager = MultiTokenManager::new(config, vec![cred], None, None, false).unwrap();
 
-        // 失败两次（使用 ID 1）
+        // Fail twice (using ID 1)
         manager.report_failure(1);
         manager.report_failure(1);
 
-        // 成功后重置计数（使用 ID 1）
+        // Reset count after success (using ID 1)
         manager.report_success(1);
 
-        // 再失败两次不会禁用
+        // Failing two more times does not disable
         manager.report_failure(1);
         manager.report_failure(1);
         assert_eq!(manager.available_count(), 1);
@@ -2270,7 +2270,7 @@ mod tests {
 
         let initial_id = manager.snapshot().current_id;
 
-        // 切换到下一个
+        // Switch to the next
         assert!(manager.switch_to_next());
         assert_ne!(manager.snapshot().current_id, initial_id);
     }
@@ -2317,7 +2317,7 @@ mod tests {
         let manager =
             MultiTokenManager::new(config, vec![cred1, cred2], None, None, false).unwrap();
 
-        // 凭据会自动分配 ID（从 1 开始）
+        // Credentials are auto-assigned IDs (starting from 1)
         for _ in 0..MAX_FAILURES_PER_CREDENTIAL {
             manager.report_failure(1);
         }
@@ -2327,7 +2327,7 @@ mod tests {
 
         assert_eq!(manager.available_count(), 0);
 
-        // 应触发自愈：重置失败计数并重新启用，避免必须重启进程
+        // Should trigger self-healing: reset failure counts and re-enable, avoiding the need to restart the process
         let ctx = manager.acquire_context(None).await.unwrap();
         assert!(ctx.token == "t1" || ctx.token == "t2");
         assert_eq!(manager.available_count(), 2);
@@ -2397,8 +2397,8 @@ mod tests {
 
         let err = manager.acquire_context(None).await.err().unwrap().to_string();
         assert!(
-            err.contains("所有凭据均已禁用"),
-            "错误应提示所有凭据禁用，实际: {}",
+            err.contains("all credentials are disabled"),
+            "error should indicate all credentials disabled, got: {}",
             err
         );
     }
@@ -2412,12 +2412,12 @@ mod tests {
         let manager =
             MultiTokenManager::new(config, vec![cred1, cred2], None, None, false).unwrap();
 
-        // 凭据会自动分配 ID（从 1 开始）
+        // Credentials are auto-assigned IDs (starting from 1)
         assert_eq!(manager.available_count(), 2);
         assert!(manager.report_quota_exhausted(1));
         assert_eq!(manager.available_count(), 1);
 
-        // 再禁用第二个后，无可用凭据
+        // After disabling the second, no credentials available
         assert!(!manager.report_quota_exhausted(2));
         assert_eq!(manager.available_count(), 0);
     }
@@ -2437,18 +2437,18 @@ mod tests {
 
         let err = manager.acquire_context(None).await.err().unwrap().to_string();
         assert!(
-            err.contains("所有凭据均已禁用"),
-            "错误应提示所有凭据禁用，实际: {}",
+            err.contains("all credentials are disabled"),
+            "error should indicate all credentials disabled, got: {}",
             err
         );
         assert_eq!(manager.available_count(), 0);
     }
 
-    // ============ 凭据级 Region 优先级测试 ============
+    // ============ Credential-level Region Priority Tests ============
 
     #[test]
     fn test_credential_region_priority_uses_credential_auth_region() {
-        // 凭据配置了 auth_region 时，应使用凭据的 auth_region
+        // When credential has auth_region configured, should use credential's auth_region
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2461,7 +2461,7 @@ mod tests {
 
     #[test]
     fn test_credential_region_priority_fallback_to_credential_region() {
-        // 凭据未配置 auth_region 但配置了 region 时，应回退到凭据.region
+        // When credential has no auth_region but has region, should fall back to credential.region
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2474,7 +2474,7 @@ mod tests {
 
     #[test]
     fn test_credential_region_priority_fallback_to_config() {
-        // 凭据未配置 auth_region 和 region 时，应回退到 config
+        // When credential has neither auth_region nor region, should fall back to config
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2488,7 +2488,7 @@ mod tests {
 
     #[test]
     fn test_multiple_credentials_use_respective_regions() {
-        // 多凭据场景下，不同凭据使用各自的 auth_region
+        // In multi-credential scenarios, different credentials use their own auth_region
         let mut config = Config::default();
         config.region = "ap-northeast-1".to_string();
 
@@ -2498,7 +2498,7 @@ mod tests {
         let mut cred2 = KiroCredentials::default();
         cred2.region = Some("eu-west-1".to_string());
 
-        let cred3 = KiroCredentials::default(); // 无 region，使用 config
+        let cred3 = KiroCredentials::default(); // no region, uses config
 
         assert_eq!(cred1.effective_auth_region(&config), "us-east-1");
         assert_eq!(cred2.effective_auth_region(&config), "eu-west-1");
@@ -2507,7 +2507,7 @@ mod tests {
 
     #[test]
     fn test_idc_oidc_endpoint_uses_credential_auth_region() {
-        // 验证 IdC OIDC endpoint URL 使用凭据 auth_region
+        // Verify IdC OIDC endpoint URL uses credential auth_region
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2522,7 +2522,7 @@ mod tests {
 
     #[test]
     fn test_social_refresh_endpoint_uses_credential_auth_region() {
-        // 验证 Social refresh endpoint URL 使用凭据 auth_region
+        // Verify Social refresh endpoint URL uses credential auth_region
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2540,14 +2540,14 @@ mod tests {
 
     #[test]
     fn test_api_call_uses_effective_api_region() {
-        // 验证 API 调用使用 effective_api_region
+        // Verify API calls use effective_api_region
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
         let mut credentials = KiroCredentials::default();
         credentials.region = Some("eu-west-1".to_string());
 
-        // 凭据.region 不参与 api_region 回退链
+        // credential.region does not participate in the api_region fallback chain
         let api_region = credentials.effective_api_region(&config);
         let api_host = format!("q.{}.amazonaws.com", api_region);
 
@@ -2556,7 +2556,7 @@ mod tests {
 
     #[test]
     fn test_api_call_uses_credential_api_region() {
-        // 凭据配置了 api_region 时，API 调用应使用凭据的 api_region
+        // When credential has api_region, API calls should use credential's api_region
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2571,7 +2571,7 @@ mod tests {
 
     #[test]
     fn test_credential_region_empty_string_treated_as_set() {
-        // 空字符串 auth_region 被视为已设置（虽然不推荐，但行为应一致）
+        // Empty string auth_region is treated as set (not recommended, but behavior should be consistent)
         let mut config = Config::default();
         config.region = "us-west-2".to_string();
 
@@ -2579,13 +2579,13 @@ mod tests {
         credentials.auth_region = Some("".to_string());
 
         let region = credentials.effective_auth_region(&config);
-        // 空字符串被视为已设置，不会回退到 config
+        // Empty string is treated as set; will not fall back to config
         assert_eq!(region, "");
     }
 
     #[test]
     fn test_auth_and_api_region_independent() {
-        // auth_region 和 api_region 互不影响
+        // auth_region and api_region do not affect each other
         let mut config = Config::default();
         config.region = "default".to_string();
 

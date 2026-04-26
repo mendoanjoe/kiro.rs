@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 pub struct CredentialsStatusResponse {
     /// 凭据总数
     pub total: usize,
-    /// 可用凭据数量（未禁用）
+    /// Number of available credentials（未禁用）
     pub available: usize,
-    /// 当前活跃凭据 ID
+    /// Currently active credential ID
     pub current_id: u64,
     /// 各凭据状态列表
     pub credentials: Vec<CredentialStatusItem>,
@@ -22,42 +22,42 @@ pub struct CredentialsStatusResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialStatusItem {
-    /// 凭据唯一 ID
+    /// Unique credential ID
     pub id: u64,
-    /// 优先级（数字越小优先级越高）
+    /// Priority（数字越小优先级越高）
     pub priority: u32,
-    /// 是否被禁用
+    /// Whether disabled
     pub disabled: bool,
-    /// 连续失败次数
+    /// Number of consecutive failures
     pub failure_count: u32,
     /// 是否为当前活跃凭据
     pub is_current: bool,
-    /// Token 过期时间（RFC3339 格式）
+    /// Token expiry time（RFC3339 格式）
     pub expires_at: Option<String>,
-    /// 认证方式
+    /// Authentication method
     pub auth_method: Option<String>,
-    /// 是否有 Profile ARN
+    /// Whether a Profile ARN is present
     pub has_profile_arn: bool,
-    /// refreshToken 的 SHA-256 哈希（仅 OAuth 凭据，用于前端去重）
+    /// SHA-256 hash of the refreshToken (OAuth credentials only; used for deduplication on the frontend)
     pub refresh_token_hash: Option<String>,
-    /// kiroApiKey 的 SHA-256 哈希（仅 API Key 凭据，用于前端去重）
+    /// SHA-256 hash of kiroApiKey (API Key credentials only; used for deduplication on the frontend)
     pub api_key_hash: Option<String>,
-    /// kiroApiKey 的脱敏展示（仅 API Key 凭据，用于前端显示）
+    /// Masked display of kiroApiKey (API Key credentials only; shown on the frontend)
     pub masked_api_key: Option<String>,
-    /// 用户邮箱（用于前端显示）
+    /// User email (shown on the frontend)
     pub email: Option<String>,
-    /// API 调用成功次数
+    /// Number of successful API calls
     pub success_count: u64,
-    /// 最后一次 API 调用时间（RFC3339 格式）
+    /// Timestamp of the last successful API call (RFC3339 format)
     pub last_used_at: Option<String>,
-    /// 是否配置了凭据级代理
+    /// Whether a credential-level proxy is configured
     pub has_proxy: bool,
-    /// 代理 URL（用于前端展示）
+    /// Proxy URL (shown on the frontend)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
-    /// Token 刷新连续失败次数
+    /// Number of consecutive token refresh failures
     pub refresh_failure_count: u32,
-    /// 禁用原因
+    /// Reason for disabling
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
     /// 端点名称（决定该凭据走哪套 Kiro API，已回退到默认端点）
@@ -86,10 +86,10 @@ pub struct SetPriorityRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddCredentialRequest {
-    /// 刷新令牌（OAuth 凭据必填，API Key 凭据不需要）
+    /// Refresh token（OAuth 凭据必填，API Key 凭据不需要）
     pub refresh_token: Option<String>,
 
-    /// 认证方式（可选，默认 social）
+    /// Authentication method（可选，默认 social）
     #[serde(default = "default_auth_method")]
     pub auth_method: String,
 
@@ -99,18 +99,18 @@ pub struct AddCredentialRequest {
     /// OIDC Client Secret（IdC 认证需要）
     pub client_secret: Option<String>,
 
-    /// 优先级（可选，默认 0）
+    /// Priority（可选，默认 0）
     #[serde(default)]
     pub priority: u32,
 
-    /// 凭据级 Region 配置（用于 OIDC token 刷新）
-    /// 未配置时回退到 config.json 的全局 region
+    /// Credential-level region configuration (for OIDC token refresh)
+    /// Falls back to the global region in config.json if not configured
     pub region: Option<String>,
 
-    /// 凭据级 Auth Region（用于 Token 刷新）
+    /// Credential-level Auth Region (for token refresh)
     pub auth_region: Option<String>,
 
-    /// 凭据级 API Region（用于 API 请求）
+    /// Credential-level API Region (for API requests)
     pub api_region: Option<String>,
 
     /// 凭据级 Machine ID（可选，64 位字符串）
@@ -123,14 +123,14 @@ pub struct AddCredentialRequest {
     /// 凭据级代理 URL（可选，特殊值 "direct" 表示不使用代理）
     pub proxy_url: Option<String>,
 
-    /// 凭据级代理认证用户名（可选）
+    /// Credential-level proxy authentication username (optional)
     pub proxy_username: Option<String>,
 
-    /// 凭据级代理认证密码（可选）
+    /// Credential-level proxy authentication password (optional)
     pub proxy_password: Option<String>,
 
     /// Kiro API Key（API Key 凭据必填，格式: ksk_xxxxxxxx）
-    /// 设置后直接作为 Bearer Token 使用，无需 refreshToken
+    /// When set, used directly as the Bearer Token without requiring a refreshToken
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kiro_api_key: Option<String>,
 
@@ -166,9 +166,9 @@ pub struct BalanceResponse {
     pub id: u64,
     /// 订阅类型
     pub subscription_title: Option<String>,
-    /// 当前使用量
+    /// Current usage
     pub current_usage: f64,
-    /// 使用限额
+    /// Usage limit
     pub usage_limit: f64,
     /// 剩余额度
     pub remaining: f64,

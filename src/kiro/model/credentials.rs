@@ -1,7 +1,7 @@
-//! Kiro OAuth 凭证数据模型
+//! Kiro OAuth credential data model
 //!
-//! 支持从 Kiro IDE 的凭证文件加载，使用 Social 认证方式
-//! 支持单凭据和多凭据配置格式
+//! Supports loading from Kiro IDE credential files using Social authentication
+//! Supports both single-credential and multi-credential configuration formats
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -10,19 +10,19 @@ use std::path::Path;
 use crate::http_client::ProxyConfig;
 use crate::model::config::Config;
 
-/// Kiro OAuth 凭证
+/// Kiro OAuth credentials
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroCredentials {
-    /// 凭据唯一标识符（自增 ID）
+    /// Unique credential identifier (auto-incremented ID)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
 
-    /// 访问令牌
+    /// Access token
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
 
-    /// 刷新令牌
+    /// Refresh token
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
 
@@ -30,88 +30,88 @@ pub struct KiroCredentials {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_arn: Option<String>,
 
-    /// 过期时间 (RFC3339 格式)
+    /// Expiry time (RFC3339 format)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
 
-    /// 认证方式 (social / idc)
+    /// Authentication method (social / idc)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
 
-    /// OIDC Client ID (IdC 认证需要)
+    /// OIDC Client ID (required for IdC authentication)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
 
-    /// OIDC Client Secret (IdC 认证需要)
+    /// OIDC Client Secret (required for IdC authentication)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
 
-    /// 凭据优先级（数字越小优先级越高，默认为 0）
+    /// Credential priority (lower number means higher priority; default is 0)
     #[serde(default)]
     #[serde(skip_serializing_if = "is_zero")]
     pub priority: u32,
 
-    /// 凭据级 Region 配置（用于 OIDC token 刷新）
-    /// 未配置时回退到 config.json 的全局 region
+    /// Credential-level region configuration (for OIDC token refresh)
+    /// Falls back to the global region in config.json if not configured
     #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
 
-    /// 凭据级 Auth Region（用于 Token 刷新）
+    /// Credential-level Auth Region (for token refresh)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_region: Option<String>,
 
-    /// 凭据级 API Region（用于 API 请求）
+    /// Credential-level API Region (for API requests)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_region: Option<String>,
 
-    /// 凭据级 Machine ID 配置（可选）
-    /// 未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生
+    /// Credential-level Machine ID configuration (optional)
+    /// Falls back to config.json's machineId if not set; derived from refreshToken if both are unset
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine_id: Option<String>,
 
-    /// 用户邮箱（从 Anthropic API 获取）
+    /// User email (retrieved from the Anthropic API)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 
-    /// 订阅等级（KIRO PRO+ / KIRO FREE 等）
+    /// Subscription tier (KIRO PRO+ / KIRO FREE, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub subscription_title: Option<String>,
 
-    /// 凭据级代理 URL（可选）
-    /// 支持 http/https/socks5 协议
-    /// 特殊值 "direct" 表示显式不使用代理（即使全局配置了代理）
-    /// 未配置时回退到全局代理配置
+    /// Credential-level proxy URL (optional)
+    /// Supports http/https/socks5 protocols
+    /// Special value "direct" means explicitly no proxy (even if a global proxy is configured)
+    /// Falls back to the global proxy configuration if not set
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
 
-    /// 凭据级代理认证用户名（可选）
+    /// Credential-level proxy authentication username (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_username: Option<String>,
 
-    /// 凭据级代理认证密码（可选）
+    /// Credential-level proxy authentication password (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
 
-    /// 凭据是否被禁用（默认为 false）
+    /// Whether the credential is disabled (default: false)
     #[serde(default)]
     pub disabled: bool,
 
-    /// Kiro API Key（headless 模式）
-    /// 格式: ksk_xxxxxxxx
-    /// 设置后直接作为 Bearer Token 使用，无需 refreshToken
+    /// Kiro API Key (headless mode)
+    /// Format: ksk_xxxxxxxx
+    /// When set, used directly as the Bearer Token without requiring a refreshToken
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kiro_api_key: Option<String>,
 
-    /// 端点名称（可选）
+    /// Endpoint name (optional)
     ///
-    /// 决定该凭据走哪套 Kiro API。未配置时回退到 `config.defaultEndpoint`（默认 "ide"）。
-    /// 端点名必须在启动时注册的端点 registry 中存在。
+    /// Determines which Kiro API this credential uses. Falls back to `config.defaultEndpoint` (default: "ide") if not configured.
+    /// The endpoint name must exist in the endpoint registry registered at startup.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
 }
 
-/// 判断是否为零（用于跳过序列化）
+/// Check whether the value is zero (used to skip serialization)
 fn is_zero(value: &u32) -> bool {
     *value == 0
 }
@@ -126,37 +126,37 @@ fn canonicalize_auth_method_value(value: &str) -> &str {
     }
 }
 
-/// 凭据配置（支持单对象或数组格式）
+/// Credential configuration (supports single-object or array format)
 ///
-/// 自动识别配置文件格式：
-/// - 单对象格式（旧格式，向后兼容）
-/// - 数组格式（新格式，支持多凭据）
+/// Automatically detects the configuration file format:
+/// - Single-object format (legacy format, backward compatible)
+/// - Array format (new format, supports multiple credentials)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CredentialsConfig {
-    /// 单个凭据（旧格式）
+    /// Single credential (legacy format)
     Single(KiroCredentials),
-    /// 多凭据数组（新格式）
+    /// Multiple credentials array (new format)
     Multiple(Vec<KiroCredentials>),
 }
 
 impl CredentialsConfig {
-    /// 从文件加载凭据配置
+    /// Load credential configuration from file
     ///
-    /// - 如果文件不存在，返回空数组
-    /// - 如果文件内容为空，返回空数组
-    /// - 支持单对象或数组格式
+    /// - Returns an empty array if the file does not exist
+    /// - Returns an empty array if the file is empty
+    /// - Supports single-object or array format
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
 
-        // 文件不存在时返回空数组
+        // Return empty array when file does not exist
         if !path.exists() {
             return Ok(CredentialsConfig::Multiple(vec![]));
         }
 
         let content = fs::read_to_string(path)?;
 
-        // 文件为空时返回空数组
+        // Return empty array when file is empty
         if content.trim().is_empty() {
             return Ok(CredentialsConfig::Multiple(vec![]));
         }
@@ -165,7 +165,7 @@ impl CredentialsConfig {
         Ok(config)
     }
 
-    /// 转换为按优先级排序的凭据列表
+    /// Convert to a credential list sorted by priority
     pub fn into_sorted_credentials(self) -> Vec<KiroCredentials> {
         match self {
             CredentialsConfig::Single(mut cred) => {
@@ -173,7 +173,7 @@ impl CredentialsConfig {
                 vec![cred]
             }
             CredentialsConfig::Multiple(mut creds) => {
-                // 按优先级排序（数字越小优先级越高）
+                // Sort by priority (lower number = higher priority)
                 creds.sort_by_key(|c| c.priority);
                 for cred in &mut creds {
                     cred.canonicalize_auth_method();
@@ -183,7 +183,7 @@ impl CredentialsConfig {
         }
     }
 
-    /// 判断是否为多凭据格式（数组格式）
+    /// Check whether this is multi-credential format (array format)
     pub fn is_multiple(&self) -> bool {
         matches!(self, CredentialsConfig::Multiple(_))
     }
@@ -198,8 +198,8 @@ impl KiroCredentials {
         "credentials.json"
     }
 
-    /// 获取有效的 Auth Region（用于 Token 刷新）
-    /// 优先级：凭据.auth_region > 凭据.region > config.auth_region > config.region
+    /// Get the effective Auth Region (for token refresh)
+    /// Priority：凭据.auth_region > 凭据.region > config.auth_region > config.region
     pub fn effective_auth_region<'a>(&'a self, config: &'a Config) -> &'a str {
         self.auth_region
             .as_deref()
@@ -207,17 +207,17 @@ impl KiroCredentials {
             .unwrap_or(config.effective_auth_region())
     }
 
-    /// 获取有效的 API Region（用于 API 请求）
-    /// 优先级：凭据.api_region > config.api_region > config.region
+    /// Get the effective API Region (for API requests)
+    /// Priority：凭据.api_region > config.api_region > config.region
     pub fn effective_api_region<'a>(&'a self, config: &'a Config) -> &'a str {
         self.api_region
             .as_deref()
             .unwrap_or(config.effective_api_region())
     }
 
-    /// 获取有效的代理配置
-    /// 优先级：凭据代理 > 全局代理 > 无代理
-    /// 特殊值 "direct" 表示显式不使用代理（即使全局配置了代理）
+    /// Get the effective proxy configuration
+    /// Priority：凭据代理 > 全局代理 > 无代理
+    /// Special value "direct" means explicitly no proxy (even if a global proxy is configured)
     pub fn effective_proxy(&self, global_proxy: Option<&ProxyConfig>) -> Option<ProxyConfig> {
         match self.proxy_url.as_deref() {
             Some(url) if url.eq_ignore_ascii_case(Self::PROXY_DIRECT) => None,
@@ -246,24 +246,24 @@ impl KiroCredentials {
         }
     }
 
-    /// 检查凭据是否支持 Opus 模型
+    /// Check whether the credential supports Opus models
     ///
-    /// Free 账号不支持 Opus 模型，需要 PRO 或更高等级订阅
+    /// Free accounts do not support Opus models; a PRO or higher subscription is required
     pub fn supports_opus(&self) -> bool {
         match &self.subscription_title {
             Some(title) => {
                 let title_upper = title.to_uppercase();
-                // 如果包含 FREE，则不支持 Opus
+                // If it contains FREE, Opus is not supported
                 !title_upper.contains("FREE")
             }
-            // 如果还没有获取订阅信息，暂时允许（首次使用时会获取）
+            // If subscription info has not been fetched yet, tentatively allow it (will be fetched on first use)
             None => true,
         }
     }
 
-    /// 检查是否为 API Key 凭据
+    /// Check whether this is an API Key credential
     ///
-    /// API Key 凭据直接使用 kiro_api_key 作为 Bearer Token，无需 refreshToken
+    /// API Key credentials use kiro_api_key directly as the Bearer Token without requiring a refreshToken
     pub fn is_api_key_credential(&self) -> bool {
         self.kiro_api_key.is_some()
             || self
@@ -798,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_auth_and_api_region_independent() {
-        // auth_region 和 api_region 互不影响
+        // auth_region and api_region do not affect each other
         let mut config = Config::default();
         config.region = "default".to_string();
 
@@ -810,7 +810,7 @@ mod tests {
         assert_eq!(creds.effective_api_region(&config), "api-only");
     }
 
-    // ============ 凭据级代理优先级测试 ============
+    // ============ Credential-level Proxy Priority Tests ============
 
     #[test]
     fn test_effective_proxy_credential_overrides_global() {
